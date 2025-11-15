@@ -1,19 +1,19 @@
 """
-llm_router.py — роутер, який зв'язує TelegramAPI, HistoryManager та MistralAPI.
+llm_router.py — роутер, який зв'язує TelegramAPI, HistoryManager та LLMAPI.
 
 Логіка:
 - отримує нове повідомлення від користувача
 - записує його в історію
 - завантажує system prompt з файлу (залежно від налаштувань)
 - будує messages (system + історія user/assistant)
-- викликає Mistral
+- викликає LLM
 - зберігає відповідь в історію
 - надсилає відповідь у Telegram (НЕ як reply)
 """
 
 import os
 
-from src.llm_api.mistral_api import MistralAPI
+from src.llm_api.llm_api import LLMAPI
 from src.llm_api.config import SYSTEM_PROMPTS_DIR, SYSTEM_PROMPT_NAME
 from src.telegram_api.telegram_api import TelegramAPI
 from src.history.history_manager import HistoryManager
@@ -23,7 +23,7 @@ class LLMRouter:
     def __init__(
         self,
         telegram_api: TelegramAPI,
-        llm_api: MistralAPI,
+        llm_api: LLMAPI,
         history_manager: HistoryManager,
     ):
         self.telegram = telegram_api

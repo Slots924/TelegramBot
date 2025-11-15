@@ -4,19 +4,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # базові LLM налаштування
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-if not MISTRAL_API_KEY:
-    raise RuntimeError("❌ MISTRAL_API_KEY не знайдено в .env")
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+if not LLM_API_KEY:
+    raise RuntimeError("❌ LLM_API_KEY не знайдено в .env")
 
-BASE_URL = os.getenv(
-    "BASE_URL", "https://api.mistral.ai/v1/chat/completions"
+LLM_BASE_URL = os.getenv(
+    "LLM_BASE_URL", "https://api.mistral.ai/v1/chat/completions"
 )
-MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
-MISTRAL_TEMPERATURE = float(os.getenv("MISTRAL_TEMPERATURE", "0.7"))
-MISTRAL_MAX_TOKENS = int(os.getenv("MISTRAL_MAX_TOKENS", "512"))
-MISTRAL_TOP_P = float(os.getenv("MISTRAL_TOP_P", "0.9"))
-MISTRAL_PRESENCE_PENALTY = float(os.getenv("MISTRAL_PRESENCE_PENALTY", "0.8"))
-MISTRAL_FREQUENCY_PENALTY = float(os.getenv("MISTRAL_FREQUENCY_PENALTY", "0.6"))
+LLM_MODEL = os.getenv("LLM_MODEL", "mistral-small-latest")
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "512"))
+LLM_TOP_P = float(os.getenv("LLM_TOP_P", "0.9"))
+LLM_PRESENCE_PENALTY = float(os.getenv("LLM_PRESENCE_PENALTY", "0.8"))
+LLM_FREQUENCY_PENALTY = float(os.getenv("LLM_FREQUENCY_PENALTY", "0.6"))
 
 # директорія src/
 MODULE_DIR = os.path.dirname(__file__)
