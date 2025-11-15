@@ -8,8 +8,8 @@ MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 if not MISTRAL_API_KEY:
     raise RuntimeError("❌ MISTRAL_API_KEY не знайдено в .env")
 
-MISTRAL_BASE_URL = os.getenv(
-    "MISTRAL_BASE_URL", "https://api.mistral.ai/v1/chat/completions"
+BASE_URL = os.getenv(
+    "BASE_URL", "https://api.mistral.ai/v1/chat/completions"
 )
 MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
 MISTRAL_TEMPERATURE = float(os.getenv("MISTRAL_TEMPERATURE", "0.7"))

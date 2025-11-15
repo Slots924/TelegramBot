@@ -5,7 +5,7 @@ mistral_api.py — клієнт для Mistral LLM API.
 import requests
 from .config import (
     MISTRAL_API_KEY,
-    MISTRAL_BASE_URL,
+    BASE_URL,
     MISTRAL_MODEL,
     MISTRAL_TEMPERATURE,
     MISTRAL_MAX_TOKENS,
@@ -15,7 +15,7 @@ from .config import (
 class MistralAPI:
     """Клієнт Mistral LLM."""
 
-    BASE_URL = MISTRAL_BASE_URL
+    BASE_URL = BASE_URL
 
     def __init__(self):
         self.api_key = MISTRAL_API_KEY
