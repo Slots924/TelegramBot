@@ -1,14 +1,14 @@
 import asyncio
 
 from src.telegram_api.telegram_api import TelegramAPI
-from src.llm_api.mistral_api import MistralAPI
+from src.llm_api.llm_api import LLMAPI
 from src.router.llm_router import LLMRouter
 from src.history.history_manager import HistoryManager
 
 
 async def main():
     telegram_api = TelegramAPI()
-    llm_api = MistralAPI()
+    llm_api = LLMAPI()
     history = HistoryManager()
 
     # Роутер тепер знає і про Telegram, і про LLM, і про історію
