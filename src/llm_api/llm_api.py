@@ -10,8 +10,6 @@ from .config import (
     LLM_TEMPERATURE,
     LLM_MAX_TOKENS,
     LLM_TOP_P,
-    LLM_PRESENCE_PENALTY,
-    LLM_FREQUENCY_PENALTY,
 )
 
 
@@ -30,8 +28,6 @@ class LLMAPI:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
             "LLM_TOP_P": str(LLM_TOP_P),
-            "LLM_PRESENCE_PENALTY": str(LLM_PRESENCE_PENALTY),
-            "LLM_FREQUENCY_PENALTY": str(LLM_FREQUENCY_PENALTY),
         }
 
     def generate(self, messages: list[dict]) -> str:
@@ -46,8 +42,6 @@ class LLMAPI:
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "top_p": LLM_TOP_P,
-            "presence_penalty": LLM_PRESENCE_PENALTY,
-            "frequency_penalty": LLM_FREQUENCY_PENALTY,
         }
 
         print("🌐 Надсилаю запит у LLM...")
