@@ -14,6 +14,9 @@ BASE_URL = os.getenv(
 MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
 MISTRAL_TEMPERATURE = float(os.getenv("MISTRAL_TEMPERATURE", "0.7"))
 MISTRAL_MAX_TOKENS = int(os.getenv("MISTRAL_MAX_TOKENS", "512"))
+MISTRAL_TOP_P = float(os.getenv("MISTRAL_TOP_P", "0.9"))
+MISTRAL_PRESENCE_PENALTY = float(os.getenv("MISTRAL_PRESENCE_PENALTY", "0.8"))
+MISTRAL_FREQUENCY_PENALTY = float(os.getenv("MISTRAL_FREQUENCY_PENALTY", "0.6"))
 
 # директорія src/
 MODULE_DIR = os.path.dirname(__file__)
