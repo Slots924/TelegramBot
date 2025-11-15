@@ -1,3 +1,7 @@
+"""
+mistral_api.py — клієнт для Mistral LLM API.
+"""
+
 import requests
 from .config import (
     MISTRAL_API_KEY,
@@ -23,17 +27,11 @@ class MistralAPI:
             "Content-Type": "application/json",
         }
 
-    def send_message(self, text: str, system_prompt: str | None = None) -> str:
+    def generate(self, messages: list[dict]) -> str:
         """
-        Надсилає один запит у Mistral і повертає текст відповіді.
-        БЛОКУЮЧА операція (requests), але для тестів це ок.
+        Приймає повний список messages (system/user/assistant)
+        і повертає текст відповіді.
         """
-
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-
-        messages.append({"role": "user", "content": text})
 
         payload = {
             "model": self.model,
