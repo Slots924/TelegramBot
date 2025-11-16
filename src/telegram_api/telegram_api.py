@@ -1,3 +1,4 @@
+import asyncio
 import os
 from telethon import TelegramClient, events
 from .config import TELEGRAM_API_ID, TELEGRAM_API_HASH, SESSION_NAME
@@ -63,9 +64,37 @@ class TelegramAPI:
 
         print(f"\n💬 Нове повідомлення від {user_id} в чаті {chat_id}: {text}")
 
+        try:
+            # Позначаємо повідомлення як прочитане, щоби Telegram не показував "непрочитано".
+            await event.mark_read()
+        except Exception as exc:
+            # Якщо не вдалось — просто лог, бо це не критично для подальшої логіки.
+            print(f"⚠️ Не вдалося позначити повідомлення прочитаним: {exc}")
+
         # Передаємо в роутер для обробки (LLM, логіка, відповідь)
         await self._router.handle_incoming_message(
             user_id=user_id,
             chat_id=chat_id,
             text=text,
         )
+
+    async def send_typing(self, chat_id: int | str, duration: float) -> None:
+        """Надсилає статус "typing" та чекає потрібний час.
+
+        Parameters
+        ----------
+        chat_id: int | str
+            Чат, у якому потрібно показати, що "бот" набирає текст.
+        duration: float
+            Скільки секунд підтримувати статус typing.
+        """
+
+        if duration <= 0:
+            return
+
+        try:
+            # context manager Telethon сам зніме статус typing після виходу з блоку
+            async with self.client.action(chat_id, "typing"):
+                await asyncio.sleep(duration)
+        except Exception as exc:
+            print(f"⚠️ Не вдалося показати статус typing у чаті {chat_id}: {exc}")

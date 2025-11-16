@@ -30,3 +30,25 @@ DEBOUNCE_SECONDS: float = _get_float_env("DEBOUNCE_SECONDS", 2.0)
 
 TYPING_SECONDS_DEFAULT: float = _get_float_env("TYPING_SECONDS_DEFAULT", 5.0)
 """float: базова тривалість імітації набору тексту у Telegram."""
+
+
+def get_typing_duration(answer_text: str) -> float:
+    """Обчислює, скільки секунд імітувати набір відповіді.
+
+    Поки що функція повертає фіксоване значення з налаштувань.
+    У майбутньому тут можна буде аналізувати довжину відповіді,
+    складність тексту тощо.
+
+    Parameters
+    ----------
+    answer_text: str
+        Текст, який плануємо відправити користувачу.
+
+    Returns
+    -------
+    float
+        Кількість секунд, протягом яких показуємо статус "typing".
+    """
+
+    _ = answer_text  # Параметр поки не використовується, але залишаємо для майбутніх змін.
+    return TYPING_SECONDS_DEFAULT
