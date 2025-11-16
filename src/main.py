@@ -1,21 +1,25 @@
 import asyncio
 
-from src.telegram_api.telegram_api import TelegramAPI
+from src.history.history_manager import HistoryManager
 from src.llm_api.llm_api import LLMAPI
 from src.router.llm_router import LLMRouter
-from src.history.history_manager import HistoryManager
+from src.system_prompts.loader import load_system_prompt
+from src.telegram_api.telegram_api import TelegramAPI
 
 
-async def main():
+async def main() -> None:
+    """Точка входу: збирає сервіси, підключає їх і запускає Telegram-клієнт."""
+
     telegram_api = TelegramAPI()
     llm_api = LLMAPI()
     history = HistoryManager()
+    system_prompt = load_system_prompt()
 
-    # Роутер тепер знає і про Telegram, і про LLM, і про історію
     router = LLMRouter(
         telegram_api=telegram_api,
         llm_api=llm_api,
         history_manager=history,
+        system_prompt=system_prompt,
     )
 
     telegram_api.set_router(router)
