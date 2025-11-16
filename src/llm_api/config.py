@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
 
+import settings as project_settings
+
 load_dotenv()
 
 # базові LLM налаштування
@@ -25,5 +27,7 @@ SRC_DIR = os.path.dirname(MODULE_DIR)
 # дефолтна папка з системними промптами: src/system_prompts
 DEFAULT_SYSTEM_PROMPTS_DIR = os.path.join(SRC_DIR, "system_prompts")
 
-SYSTEM_PROMPTS_DIR = os.getenv("SYSTEM_PROMPTS_DIR", DEFAULT_SYSTEM_PROMPTS_DIR)
-SYSTEM_PROMPT_NAME = os.getenv("SYSTEM_PROMPT_NAME", "default")
+SYSTEM_PROMPTS_DIR = getattr(
+    project_settings, "SYSTEM_PROMPTS_DIR", DEFAULT_SYSTEM_PROMPTS_DIR
+)
+SYSTEM_PROMPT_NAME = project_settings.SYSTEM_PROMPT_NAME
