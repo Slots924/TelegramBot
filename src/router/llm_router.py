@@ -7,10 +7,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List
 
-from src.config.settings import DEBOUNCE_SECONDS
+from src.config.settings import DEBOUNCE_SECONDS, get_typing_duration
 from src.history.history_manager import HistoryManager
 from src.llm_api.llm_api import LLMAPI
-from src.router.utils import get_typing_duration
 from src.telegram_api.telegram_api import TelegramAPI
 
 
@@ -138,7 +137,7 @@ class LLMRouter:
 
             typing_duration = get_typing_duration(answer)
             print(f"⌨️ Імітую набір {typing_duration} с для користувача {user_id}.")
-            await asyncio.sleep(typing_duration)
+            await self.telegram.send_typing(chat_id, typing_duration)
 
             try:
                 await self.telegram.send_message(chat_id, answer)
