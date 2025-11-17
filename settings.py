@@ -8,5 +8,5 @@ HISTORY_MAX_MESSAGES_PER_CHUNK = 20
 HISTORY_MAX_CHUNKS_FOR_CONTEXT = 5
 
 # System prompts
-SYSTEM_PROMPT_NAME = "only_fans"         # ім'я файлу без .txt
+SYSTEM_PROMPT_NAME = "maria_koval"         # ім'я файлу без .txt
 # SYSTEM_PROMPTS_DIR = "src/system_prompts"
