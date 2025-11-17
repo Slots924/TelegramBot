@@ -1,0 +1,8 @@
+# Telegram client (User API)
+telethon>=1.36.0
+
+# Зчитування змінних з .env
+python-dotenv>=1.0.1
+
+# HTTP-запити до LLM (Grok 4 Fast) та інших API
+requests>=2.31.0
