@@ -40,6 +40,9 @@ project_root/
 ├── .env                       # секрети та конфіг (Telegram, Grok, історія, промпти)
 ├── .gitignore
 ├── requirements.txt
+├── data/                      # робочі дані, що не є кодом
+│   ├── dialogs/               # user_<id>/chunk_XXXX.json (створюються під час роботи)
+│   └── system_prompts/        # *.txt файли системних промптів
 └── src/
     ├── main.py                # точка входу, збирає всі сервіси й запускає цикл
     │
@@ -52,22 +55,23 @@ project_root/
     │
     ├── llm_api/               # робота з LLM (Grok 4 Fast)
     │   ├── __init__.py
-    │   ├── config.py          # GROK_API_KEY, GROK_MODEL, TEMPERATURE, MAX_TOKENS, SYSTEM_PROMPT_NAME
-    │   └── grok_api.py        # клас GrokAPI: метод generate(messages: list[dict]) -> str
+    │   ├── config.py          # ключі LLM, параметри запиту, шлях до system prompt
+    │   ├── llm_api.py         # клас LLMAPI: метод generate(messages: list[dict]) -> str
+    │   ├── hendlers/          # місце під майбутні LLM-хендлери
+    │   └── utils/             # допоміжні утиліти (завантаження system prompt тощо)
     │
     ├── history/               # зберігання історії діалогів
     │   ├── __init__.py
     │   ├── config.py          # HISTORY_BASE_DIR, MAX_MESSAGES_PER_CHUNK, MAX_CHUNKS_FOR_CONTEXT
     │   ├── history_manager.py # клас HistoryManager: append_message(), get_recent_context()
-    │   └── dialogs/           # user_<id>/chunk_XXXX.json (створюються під час роботи)
+    │   ├── hendlers/          # місце під додаткові обробники історії
+    │   └── utils/             # допоміжні утиліти для історії
     │
     ├── router/                # “мозок” — зв'язує Telegram, історію та LLM
     │   ├── __init__.py
-    │   └── llm_router.py      # клас LLMRouter: пер-юзерна логіка, стани, debounce, виклики LLM
-    │
-    └── system_prompts/        # файли system prompt для LLM
-        ├── default.txt        # дефолтний системний промпт
-        └── *.txt              # інші промпти; ім’я вибирається через SYSTEM_PROMPT_NAME у .env
+    │   ├── llm_router.py      # клас LLMRouter: пер-юзерна логіка, стани, debounce, виклики LLM
+    │   ├── hendlers/          # місце під додаткові роутерні хендлери
+    │   └── utils/             # допоміжні утиліти роутера
 ```
 
 ---
@@ -108,11 +112,15 @@ project_root/
 
 - Зчитує з `.env`:
 
-  - `GROK_API_KEY`
-  - `GROK_MODEL` (наприклад, `grok-2-4-fast` або актуальний)
-  - `GROK_TEMPERATURE`
-  - `GROK_MAX_TOKENS`
-  - `SYSTEM_PROMPTS_DIR` (опціонально, дефолт: `src/system_prompts`)
+  - `LLM_API_KEY`
+  - `LLM_BASE_URL`
+  - `LLM_MODEL`
+
+- Бере з `settings.py`:
+
+  - `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`, `LLM_TOP_P` (параметри запиту)
+  - `LLM_PRESENCE_PENALTY`, `LLM_FREQUENCY_PENALTY` (поки не використовуються, але читаються)
+  - `SYSTEM_PROMPTS_DIR` (дефолт: `data/system_prompts`)
   - `SYSTEM_PROMPT_NAME` (без `.txt`, напр. `default`)
 
 **grok_api.py / клас `GrokAPI`**
@@ -140,16 +148,16 @@ project_root/
 
 **config.py**
 
-- Зчитує з `.env`:
+- Бере з `settings.py`:
 
-  - `HISTORY_BASE_DIR` (дефолт: `src/history/dialogs`)
+  - `HISTORY_BASE_DIR` (дефолт: `data/dialogs`)
   - `HISTORY_MAX_MESSAGES_PER_CHUNK` (наприклад, 20 — це ~10 пар запит/відповідь)
   - `HISTORY_MAX_CHUNKS_FOR_CONTEXT` (наприклад, 5 — скільки останніх файлів брати в контекст)
 
 **Структура на диску**
 
 ```text
-src/history/dialogs/
+data/dialogs/
   user_123456789/
     chunk_0001.json
     chunk_0002.json
@@ -227,7 +235,7 @@ src/history/dialogs/
 
 4. **Формування LLM-контексту:**
 
-   - Завантажити system prompt із `system_prompts` (обирається через `SYSTEM_PROMPT_NAME` в `.env`).
+   - Завантажити system prompt із `data/system_prompts` (ім'я задається у `SYSTEM_PROMPT_NAME` в `settings.py`).
    - Побудувати список `messages` для Grok:
      - `{"role": "system", "content": system_prompt}`
      - далі всі `history_messages` у форматі `{"role": "user"/"assistant", "content": "..."}`
@@ -267,7 +275,7 @@ src/history/dialogs/
 
 - `.txt` файли з текстом системних промптів.
 
-  - `SYSTEM_PROMPTS_DIR` — шлях до папки (дефолт: `src/system_prompts`),
+  - `SYSTEM_PROMPTS_DIR` — шлях до папки (дефолт: `data/system_prompts`),
   - `SYSTEM_PROMPT_NAME` — ім’я файлу без `.txt`.
 
 - Роутер при старті має:

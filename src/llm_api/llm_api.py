@@ -41,6 +41,7 @@ class LLMAPI:
             "messages": messages,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
+            # LLM_TOP_P використовуємо у headers і тілі; решта пенальті поки не потрібні
             "top_p": LLM_TOP_P,
         }
 

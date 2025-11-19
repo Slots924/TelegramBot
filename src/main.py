@@ -2,8 +2,8 @@ import asyncio
 
 from src.history.history_manager import HistoryManager
 from src.llm_api.llm_api import LLMAPI
+from src.llm_api.utils.loader import load_system_prompt
 from src.router.llm_router import LLMRouter
-from src.system_prompts.loader import load_system_prompt
 from src.telegram_api.telegram_api import TelegramAPI
 
 
