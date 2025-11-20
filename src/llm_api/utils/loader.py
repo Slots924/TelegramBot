@@ -32,3 +32,23 @@ def load_system_prompt(prompt_name: Optional[str] = None) -> str:
     except FileNotFoundError:
         print(f"⚠️ System prompt {filename} не знайдено в {SYSTEM_PROMPTS_DIR}. Використовую дефолт.")
         return "Ти асистент. Відповідай коротко і зрозуміло."
+
+
+def load_optional_prompt(prompt_name: str) -> str | None:
+    """Повертає вміст додаткового промпта або None, якщо файл відсутній.
+
+    Використовується для необов'язкових системних промптів, щоб у разі
+    відсутності файлу ми просто пропускали цей блок і не ламали логіку.
+    """
+
+    filename = f"{prompt_name}.txt"
+    path = os.path.join(SYSTEM_PROMPTS_DIR, filename)
+
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            prompt = file.read().strip()
+            print(f"📄 Додатковий system prompt завантажено: {filename}")
+            return prompt
+    except FileNotFoundError:
+        print(f"ℹ️ Додатковий system prompt {filename} не знайдено. Пропускаю.")
+        return None

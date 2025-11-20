@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional, Sequence
 
-from src.config.settings import DEBOUNCE_SECONDS, get_typing_duration
+from settings import (
+    ACTIONS_SYSTEM_PROMPT,
+    HISTORY_BASE_DIR,
+    USER_INFO_FILENAME,
+    USER_INFO_SYSTEM_PROMPT,
+)
+from src.config.settings import DEBOUNCE_SECONDS
 from src.history.history_manager import HistoryManager
 from src.llm_api.llm_api import LLMAPI
+from src.llm_api.utils.loader import load_optional_prompt
 from src.telegram_api.telegram_api import TelegramAPI
 
 
@@ -17,11 +26,20 @@ from src.telegram_api.telegram_api import TelegramAPI
 class UserState:
     """Стан одного користувача всередині роутера."""
 
-    inbox: List[str] = field(default_factory=list)
+    inbox: List["ReceivedMessage"] = field(default_factory=list)
     busy: bool = False
     last_activity: datetime | None = None
     debounce_task: asyncio.Task | None = None
     last_chat_id: int | None = None
+
+
+@dataclass
+class ReceivedMessage:
+    """Описує вхідне повідомлення у внутрішній черзі."""
+
+    text: str
+    message_id: int | str | None
+    message_time_iso: str | None
 
 
 class LLMRouter:
@@ -40,14 +58,33 @@ class LLMRouter:
         self.llm = llm_api
         self.history = history_manager
         self.system_prompt = system_prompt
+        self.actions_prompt: Optional[str] = None
 
         self._state: Dict[int, UserState] = {}
 
-    async def handle_incoming_message(self, user_id: int, chat_id: int, text: str) -> None:
+        # Завантажуємо додатковий промпт з інструкціями по екшенах (якщо він увімкнений).
+        if ACTIONS_SYSTEM_PROMPT:
+            self.actions_prompt = load_optional_prompt("actions")
+
+    async def handle_incoming_message(
+        self,
+        user_id: int,
+        chat_id: int,
+        text: str,
+        message_id: int | str | None,
+        message_time: datetime,
+    ) -> None:
         """Реєструє нове повідомлення та за потреби запускає debounce."""
 
         state = self._get_state(user_id)
-        state.inbox.append(text)
+        message_time_iso = message_time.astimezone(timezone.utc).isoformat()
+        state.inbox.append(
+            ReceivedMessage(
+                text=text,
+                message_id=message_id,
+                message_time_iso=message_time_iso,
+            )
+        )
         state.last_activity = datetime.now(timezone.utc)
         state.last_chat_id = chat_id
         print(f"🧠 Додано повідомлення від {user_id}: {text}")
@@ -114,36 +151,24 @@ class LLMRouter:
             print(f"📦 Пакет із {len(batch_messages)} повідомлень для користувача {user_id}.")
 
             for message in batch_messages:
-                self.history.append_message(user_id=user_id, role="user", content=message)
+                self.history.append_message(
+                    user_id=user_id,
+                    role="user",
+                    content=message.text,
+                    message_id=message.message_id,
+                    message_time_iso=message.message_time_iso,
+                )
 
-            history_messages = self.history.get_recent_context(user_id)
-            messages_for_llm: List[dict] = [
-                {"role": "system", "content": self.system_prompt}
-            ]
-            for item in history_messages:
-                role = item.get("role")
-                content = item.get("content")
-                if not role or content is None:
-                    continue
-                messages_for_llm.append({"role": role, "content": content})
+            messages_for_llm = self._build_llm_messages(user_id=user_id)
 
             try:
-                answer = await asyncio.to_thread(self.llm.generate, messages_for_llm)
+                answer_raw = await asyncio.to_thread(self.llm.generate, messages_for_llm)
             except Exception as exc:
                 print(f"❌ Помилка при виклику LLM для {user_id}: {exc}")
-                answer = "Вибач, зараз я не можу відповісти. Спробуй пізніше."
+                answer_raw = "[]"
 
-            self.history.append_message(user_id=user_id, role="assistant", content=answer)
-
-            typing_duration = get_typing_duration(answer)
-            print(f"⌨️ Імітую набір {typing_duration} с для користувача {user_id}.")
-            await self.telegram.send_typing(chat_id, typing_duration)
-
-            try:
-                await self.telegram.send_message(chat_id, answer)
-                print(f"✅ Відповідь відправлена користувачу {user_id}.")
-            except Exception as exc:
-                print(f"❌ Не вдалося відправити повідомлення користувачу {user_id}: {exc}")
+            actions = self._parse_actions(answer_raw)
+            await self._execute_actions(chat_id=chat_id, user_id=user_id, actions=actions)
         finally:
             state.busy = False
         if state.inbox:
@@ -159,3 +184,152 @@ class LLMRouter:
                 )
         else:
             print(f"🟢 Цикл завершено для {user_id}.")
+
+    def _build_llm_messages(self, user_id: int) -> List[dict]:
+        """Формує список повідомлень для LLM з урахуванням системних промптів та історії."""
+
+        messages_for_llm: List[dict] = [{"role": "system", "content": self.system_prompt}]
+
+        # Додаємо інструкцію про actions, якщо вона увімкнена та файл існує.
+        if ACTIONS_SYSTEM_PROMPT and self.actions_prompt:
+            messages_for_llm.append({"role": "system", "content": self.actions_prompt})
+
+        # Підхоплюємо user_info.txt як системний промпт, якщо цього вимагають налаштування.
+        if USER_INFO_SYSTEM_PROMPT:
+            user_info_content = self._load_user_info_prompt(user_id)
+            if user_info_content:
+                messages_for_llm.append({"role": "system", "content": user_info_content})
+
+        history_messages = self.history.get_recent_context(user_id)
+        for item in history_messages:
+            role = item.get("role")
+            content = item.get("content")
+            if not role or content is None:
+                continue
+
+            formatted_content = self._format_history_content(
+                content=content,
+                created_at=item.get("created_at"),
+                message_id=item.get("message_id"),
+            )
+            messages_for_llm.append({"role": role, "content": formatted_content})
+
+        return messages_for_llm
+
+    def _load_user_info_prompt(self, user_id: int) -> Optional[str]:
+        """Читає user_info.txt і повертає його вміст як системний промпт."""
+
+        user_dir = os.path.join(HISTORY_BASE_DIR, f"user_{user_id}")
+        user_info_path = os.path.join(user_dir, USER_INFO_FILENAME)
+
+        if not os.path.exists(user_info_path):
+            return None
+
+        try:
+            with open(user_info_path, "r", encoding="utf-8") as file:
+                data = json.load(file)
+            # Передаємо LLM короткий системний блок із даними профілю.
+            return f"USER_INFO\n{json.dumps(data, ensure_ascii=False, indent=2)}"
+        except Exception as exc:
+            print(f"⚠️ Не вдалося прочитати user_info.txt для {user_id}: {exc}")
+            return None
+
+    @staticmethod
+    def _format_history_content(
+        content: str,
+        created_at: Optional[str],
+        message_id: Optional[int | str],
+    ) -> str:
+        """Додає до тексту повідомлення метадані, щоб LLM бачила час та message_id."""
+
+        meta_parts: List[str] = []
+        if created_at:
+            meta_parts.append(f"sent_at={created_at}")
+        if message_id:
+            meta_parts.append(f"message_id={message_id}")
+
+        if not meta_parts:
+            return content
+
+        meta_header = " | ".join(meta_parts)
+        return f"[{meta_header}]\n{content}"
+
+    @staticmethod
+    def _parse_actions(answer_raw: str) -> List[dict]:
+        """Парсить відповідь LLM у список дій. Повертає send_message з текстом, якщо JSON некоректний."""
+
+        try:
+            data = json.loads(answer_raw)
+            if isinstance(data, dict):
+                data = [data]
+            if not isinstance(data, Sequence):
+                raise ValueError("Відповідь не є масивом дій")
+            actions: List[dict] = []
+            for raw_action in data:
+                if isinstance(raw_action, dict):
+                    actions.append(raw_action)
+                else:
+                    print(f"ℹ️ Пропускаю елемент відповіді, бо він не dict: {raw_action}")
+            return actions
+        except Exception as exc:
+            print(f"⚠️ Не вдалося розпарсити дії LLM: {exc}. Використовую просте send_message.")
+            return [
+                {
+                    "type": "send_message",
+                    "human_seconds": 0,
+                    "payload": {"content": answer_raw},
+                }
+            ]
+
+    async def _execute_actions(
+        self, chat_id: int, user_id: int, actions: Sequence[dict]
+    ) -> None:
+        """По черзі виконує екшени, які повернула LLM."""
+
+        for action in actions:
+            action_type = action.get("type")
+            payload = action.get("payload") or {}
+            human_seconds = float(action.get("human_seconds", 0) or 0)
+
+            if action_type == "send_message":
+                content = payload.get("content")
+                if not content:
+                    continue
+                # Імітуємо набір перед відправкою, щоб виглядало природно.
+                await self.telegram.send_typing(chat_id, human_seconds)
+                try:
+                    message = await self.telegram.send_message(chat_id, content)
+                    message_time_iso = (
+                        message.date.astimezone(timezone.utc).isoformat()
+                        if getattr(message, "date", None)
+                        else datetime.now(timezone.utc).isoformat()
+                    )
+                    self.history.append_message(
+                        user_id=user_id,
+                        role="assistant",
+                        content=content,
+                        message_id=getattr(message, "id", None),
+                        message_time_iso=message_time_iso,
+                    )
+                except Exception as exc:
+                    print(f"❌ Не вдалося відправити повідомлення користувачу {user_id}: {exc}")
+
+            elif action_type == "add_reaction":
+                target_message_id = payload.get("message_id")
+                emoji = payload.get("emoji") or "👍"
+                if target_message_id is None:
+                    continue
+                if human_seconds > 0:
+                    await asyncio.sleep(human_seconds)
+                await self.telegram.send_reaction(chat_id, target_message_id, emoji)
+
+            elif action_type == "fake_typing":
+                if human_seconds > 0:
+                    await self.telegram.send_typing(chat_id, human_seconds)
+
+            elif action_type == "ignore":
+                # Ігноруємо без побічних ефектів.
+                continue
+            else:
+                # Невідомий тип — просто пропускаємо, щоб не ламати сценарій.
+                print(f"ℹ️ Невідомий тип дії від LLM: {action_type}. Пропускаю.")
