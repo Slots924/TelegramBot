@@ -24,3 +24,4 @@ env/
 *.tmp
 
 # історія діалогів LLM
+data/dialogs/
