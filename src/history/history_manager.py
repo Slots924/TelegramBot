@@ -4,7 +4,7 @@ history_manager.py — керування історією діалогів дл
 Ідея:
 - Для кожного користувача є своя папка:  .../history/user_<user_id>/
 - В ній лежать чанки: chunk_0001.json, chunk_0002.json, ...
-- В кожному чанку — список messages[] (role, content, created_at).
+- В кожному чанку — список messages[] (role, content, created_at, message_id).
 
 HistoryManager:
 - додає нові повідомлення в останній чанк (або створює новий)
@@ -115,12 +115,21 @@ class HistoryManager:
     # Публічні методи
     # =====================
 
-    def append_message(self, user_id: int, role: str, content: str) -> None:
+    def append_message(
+        self,
+        user_id: int,
+        role: str,
+        content: str,
+        message_id: int | str | None = None,
+        message_time_iso: str | None = None,
+    ) -> None:
         """
         Додає нове повідомлення користувача або асистента в історію.
 
         role: "user" або "assistant"
         content: текст повідомлення
+        message_id: Telegram message_id, якщо потрібно відслідковувати оригінал
+        message_time_iso: час, коли повідомлення надійшло/було відправлено (ISO UTC)
         """
         # Визначаємо, куди писати — в останній чанк або створити новий
         last_chunk_path = self._get_last_chunk_path(user_id)
@@ -161,7 +170,10 @@ class HistoryManager:
         message = {
             "role": role,
             "content": content,
-            "created_at": self._now_iso(),
+            # Коли точно було відправлено/отримано повідомлення.
+            "created_at": message_time_iso or self._now_iso(),
+            # Telegram message_id допоможе LLM ставити реакції або робити реплаї.
+            "message_id": message_id,
         }
         chunk_data["messages"].append(message)
         chunk_data["meta"]["updated_at"] = self._now_iso()

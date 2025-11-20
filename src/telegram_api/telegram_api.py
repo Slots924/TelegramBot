@@ -1,7 +1,12 @@
 import asyncio
+import json
 import os
+from datetime import datetime, timezone
+
 from telethon import TelegramClient, events
-from .config import TELEGRAM_API_ID, TELEGRAM_API_HASH, SESSION_NAME
+
+from settings import HISTORY_BASE_DIR, USER_INFO_FILENAME
+from .config import TELEGRAM_API_HASH, TELEGRAM_API_ID, SESSION_NAME
 
 
 class TelegramAPI:
@@ -42,10 +47,12 @@ class TelegramAPI:
         print("👂 Слухаю вхідні повідомлення... (Ctrl+C щоб вийти)")
         await self.client.run_until_disconnected()
 
-    async def send_message(self, chat_id: int | str, text: str) -> None:
-        """Надсилає повідомлення у вказаний чат (без reply)."""
-        await self.client.send_message(chat_id, text)
+    async def send_message(self, chat_id: int | str, text: str):
+        """Надсилає повідомлення у вказаний чат (без reply) і повертає Message."""
+
+        message = await self.client.send_message(chat_id, text)
         print(f"📨 Відправлено повідомлення в чат {chat_id}: {text}")
+        return message
 
     async def _on_new_message(self, event) -> None:
         """
@@ -61,8 +68,13 @@ class TelegramAPI:
         user_id = sender.id          # ID користувача, який написав
         chat_id = event.chat_id      # ID чату (для приватного = user_id)
         text = event.message.message # текст повідомлення
+        message_id = event.message.id
+        message_date = event.message.date or datetime.now(timezone.utc)
 
         print(f"\n💬 Нове повідомлення від {user_id} в чаті {chat_id}: {text}")
+
+        # Перевіряємо та зберігаємо user_info.txt, якщо його ще немає
+        self._ensure_user_info_file(user_id=user_id, sender=sender)
 
         try:
             # Позначаємо повідомлення як прочитане, щоби Telegram не показував "непрочитано".
@@ -76,6 +88,8 @@ class TelegramAPI:
             user_id=user_id,
             chat_id=chat_id,
             text=text,
+            message_id=message_id,
+            message_time=message_date,
         )
 
     async def send_typing(self, chat_id: int | str, duration: float) -> None:
@@ -98,3 +112,41 @@ class TelegramAPI:
                 await asyncio.sleep(duration)
         except Exception as exc:
             print(f"⚠️ Не вдалося показати статус typing у чаті {chat_id}: {exc}")
+
+    async def send_reaction(self, chat_id: int | str, message_id: int | str, emoji: str) -> None:
+        """Ставитиме реакцію на конкретне повідомлення у чаті."""
+
+        try:
+            await self.client.send_reaction(entity=chat_id, message_id=message_id, reaction=emoji)
+            print(
+                f"✅ Додано реакцію '{emoji}' у чаті {chat_id} для message_id={message_id}."
+            )
+        except Exception as exc:
+            print(f"⚠️ Не вдалося поставити реакцію в чаті {chat_id}: {exc}")
+
+    def _ensure_user_info_file(self, user_id: int, sender) -> None:
+        """Створює user_info.txt з профільними даними, якщо його ще немає."""
+
+        # Шлях до файлу з інформацією про користувача
+        user_dir = os.path.join(HISTORY_BASE_DIR, f"user_{user_id}")
+        os.makedirs(user_dir, exist_ok=True)
+        user_info_path = os.path.join(user_dir, USER_INFO_FILENAME)
+
+        if os.path.exists(user_info_path):
+            return
+
+        # Формуємо дані у форматі, який очікує LLM
+        profile_data = {
+            "id": sender.id,
+            "first_name": sender.first_name,
+            "last_name": sender.last_name,
+            "username": getattr(sender, "username", None),
+            "bio": getattr(sender, "about", None),
+        }
+
+        try:
+            with open(user_info_path, "w", encoding="utf-8") as file:
+                json.dump(profile_data, file, ensure_ascii=False, indent=2)
+            print(f"💾 Збережено user_info для {user_id} у {user_info_path}")
+        except Exception as exc:
+            print(f"⚠️ Не вдалося зберегти user_info.txt для {user_id}: {exc}")

@@ -26,6 +26,12 @@ HISTORY_MAX_CHUNKS_FOR_CONTEXT = 5
 # System prompts
 SYSTEM_PROMPT_NAME = "maria_koval"         # ім'я файлу без .txt
 SYSTEM_PROMPTS_DIR = os.path.join(DATA_DIR, "system_prompts")
+# Додаткові перемикачі системних промптів
+ACTIONS_SYSTEM_PROMPT = True   # чи додавати інструкцію з data/system_prompts/actions.txt
+USER_INFO_SYSTEM_PROMPT = True # чи передавати LLM системний промпт з інформацією про юзера
+
+# Назва файлу з інформацією про користувача всередині dialogs/user_<id>
+USER_INFO_FILENAME = "user_info.txt"
 
 # Налаштування LLM (параметри запиту)
 LLM_TEMPERATURE = 1.2
