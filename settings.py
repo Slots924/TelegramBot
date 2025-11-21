@@ -24,7 +24,7 @@ HISTORY_MAX_MESSAGES_PER_CHUNK = 20
 HISTORY_MAX_CHUNKS_FOR_CONTEXT = 5
 
 # System prompts
-SYSTEM_PROMPT_NAME = "maria_koval"         # ім'я файлу без .txt
+SYSTEM_PROMPT_NAME = "long_dialoge"         # ім'я файлу без .txt
 SYSTEM_PROMPTS_DIR = os.path.join(DATA_DIR, "system_prompts")
 # Додаткові перемикачі системних промптів
 ACTIONS_SYSTEM_PROMPT = True   # чи додавати інструкцію з data/system_prompts/actions.txt
@@ -34,9 +34,9 @@ USER_INFO_SYSTEM_PROMPT = True # чи передавати LLM системни�
 USER_INFO_FILENAME = "user_info.txt"
 
 # Налаштування LLM (параметри запиту)
-LLM_TEMPERATURE = 1.2
+LLM_TEMPERATURE = 1.25
 LLM_MAX_TOKENS = 512
-LLM_TOP_P = 0.9
+LLM_TOP_P = 0.92
 # Параметри поки не використовуються в запитах, але читаємо їх для майбутніх доробок
 LLM_PRESENCE_PENALTY = 0.92
 LLM_FREQUENCY_PENALTY = 0.6
