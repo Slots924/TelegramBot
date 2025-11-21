@@ -9,6 +9,9 @@ from settings import HISTORY_BASE_DIR, USER_INFO_FILENAME
 from .config import TELEGRAM_API_HASH, TELEGRAM_API_ID, SESSION_NAME
 
 
+ALLOWED_GROUP_CHAT_ID = -2073290710526
+
+
 class TelegramAPI:
     """Клас-обгортка для Telegram-клієнта (Telethon)."""
 
@@ -59,9 +62,13 @@ class TelegramAPI:
         Внутрішній обробник Telethon.
         Викликається щоразу, коли приходить нове вхідне повідомлення.
         """
-        if not event.is_private:
-            # Для дебагу можна залишити лог, потім захочеш — прибереш
-            print(f"⚪ Ігнорую не приватний чат (chat_id={event.chat_id})")
+        # 🔴 Хотфікс: обробляємо тільки приватні чати + одну дозволену групу
+        if not event.is_private and event.chat_id != ALLOWED_GROUP_CHAT_ID:
+            print(f"⚪ Ігнорую чат {event.chat_id} (не приватний і не дозволена група).")
+            return
+
+        if self._router is None:
+            print("⚠️ Отримано повідомлення, але роутер не налаштований.")
             return
 
         sender = await event.get_sender()
