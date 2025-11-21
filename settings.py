@@ -35,7 +35,7 @@ USER_INFO_FILENAME = "user_info.txt"
 
 # Налаштування LLM (параметри запиту)
 LLM_TEMPERATURE = 1.25
-LLM_MAX_TOKENS = 512
+LLM_MAX_TOKENS = 1024
 LLM_TOP_P = 0.92
 # Параметри поки не використовуються в запитах, але читаємо їх для майбутніх доробок
 LLM_PRESENCE_PENALTY = 0.92
