@@ -7,7 +7,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Sequence
+from typing import Awaitable, Callable, Dict, List, Optional, Sequence
 
 from settings import (
     ACTIONS_SYSTEM_PROMPT,
@@ -19,6 +19,13 @@ from src.config.settings import DEBOUNCE_SECONDS
 from src.history.history_manager import HistoryManager
 from src.llm_api.llm_api import LLMAPI
 from src.llm_api.utils.loader import load_optional_prompt
+from src.router.actions import (
+    handle_add_reaction,
+    handle_fake_typing,
+    handle_ignore,
+    handle_send_message,
+    handle_wait,
+)
 from src.telegram_api.telegram_api import TelegramAPI
 
 
@@ -61,6 +68,20 @@ class LLMRouter:
         self.actions_prompt: Optional[str] = None
 
         self._state: Dict[int, UserState] = {}
+        # Реєстр доступних хендлерів для різних типів дій.
+        self._action_handlers: Dict[
+            str,
+            Callable[
+                [TelegramAPI, HistoryManager, int, int, dict, float],
+                Awaitable[None],
+            ],
+        ] = {
+            "send_message": handle_send_message,
+            "add_reaction": handle_add_reaction,
+            "fake_typing": handle_fake_typing,
+            "ignore": handle_ignore,
+            "wait": handle_wait,
+        }
 
         # Завантажуємо додатковий промпт з інструкціями по екшенах (якщо він увімкнений).
         if ACTIONS_SYSTEM_PROMPT:
@@ -291,45 +312,18 @@ class LLMRouter:
             payload = action.get("payload") or {}
             human_seconds = float(action.get("human_seconds", 0) or 0)
 
-            if action_type == "send_message":
-                content = payload.get("content")
-                if not content:
-                    continue
-                # Імітуємо набір перед відправкою, щоб виглядало природно.
-                await self.telegram.send_typing(chat_id, human_seconds)
-                try:
-                    message = await self.telegram.send_message(chat_id, content)
-                    message_time_iso = (
-                        message.date.astimezone(timezone.utc).isoformat()
-                        if getattr(message, "date", None)
-                        else datetime.now(timezone.utc).isoformat()
-                    )
-                    self.history.append_message(
-                        user_id=user_id,
-                        role="assistant",
-                        content=content,
-                        message_id=getattr(message, "id", None),
-                        message_time_iso=message_time_iso,
-                    )
-                except Exception as exc:
-                    print(f"❌ Не вдалося відправити повідомлення користувачу {user_id}: {exc}")
+            handler = self._action_handlers.get(action_type)
 
-            elif action_type == "add_reaction":
-                target_message_id = payload.get("message_id")
-                emoji = payload.get("emoji") or "👍"
-                if target_message_id is None:
-                    continue
-                if human_seconds > 0:
-                    await asyncio.sleep(human_seconds)
-                await self.telegram.send_reaction(chat_id, target_message_id, emoji)
-
-            elif action_type == "fake_typing":
-                if human_seconds > 0:
-                    await self.telegram.send_typing(chat_id, human_seconds)
-
-            elif action_type == "ignore":
-                # Ігноруємо без побічних ефектів.
-                continue
-            else:
+            if not handler:
                 # Невідомий тип — просто пропускаємо, щоб не ламати сценарій.
                 print(f"ℹ️ Невідомий тип дії від LLM: {action_type}. Пропускаю.")
+                continue
+
+            await handler(
+                telegram=self.telegram,
+                history=self.history,
+                chat_id=chat_id,
+                user_id=user_id,
+                payload=payload,
+                human_seconds=human_seconds,
+            )
