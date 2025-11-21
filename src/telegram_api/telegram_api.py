@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timezone
 
 from telethon import TelegramClient, events
+from telethon.tl.types import Channel, Chat, User
 
 from settings import HISTORY_BASE_DIR, USER_INFO_FILENAME
 from .config import TELEGRAM_API_HASH, TELEGRAM_API_ID, SESSION_NAME
@@ -72,7 +73,14 @@ class TelegramAPI:
             return
 
         sender = await event.get_sender()
-        user_id = sender.id          # ID користувача, який написав
+
+        # Безпечний витяг ID відправника: беремо з sender або з самого event
+        # (наприклад, якщо sender == None для анонімних адмінів чи каналів).
+        user_id = getattr(sender, "id", None) or getattr(event, "sender_id", None)
+        if user_id is None:
+            print("⚠️ Не вдалося визначити user_id для повідомлення, пропускаю обробку.")
+            return
+
         chat_id = event.chat_id      # ID чату (для приватного = user_id)
         text = event.message.message # текст повідомлення
         message_id = event.message.id
@@ -141,7 +149,11 @@ class TelegramAPI:
             print(f"⚠️ Не вдалося поставити реакцію в чаті {chat_id}: {exc}")
 
     def _ensure_user_info_file(self, user_id: int, sender) -> None:
-        """Створює user_info.txt з профільними даними, якщо його ще немає."""
+        """Створює user_info.txt з профільними даними, якщо його ще немає.
+
+        Якщо відправник не є користувачем (Channel/Chat/None), метод просто
+        завершує роботу без помилки.
+        """
 
         # Шлях до файлу з інформацією про користувача
         user_dir = os.path.join(HISTORY_BASE_DIR, f"user_{user_id}")
@@ -151,11 +163,27 @@ class TelegramAPI:
         if os.path.exists(user_info_path):
             return
 
-        # Формуємо дані у форматі, який очікує LLM
+        # Якщо відправник відсутній — нічого не записуємо, бо немає даних про профіль.
+        if sender is None:
+            print("⚪ Відправник невідомий (None), user_info не зберігаємо.")
+            return
+
+        # Якщо відправник не User (наприклад, Channel або Chat) — пропускаємо збереження,
+        # щоб уникнути AttributeError при доступі до полів first_name/last_name.
+        if isinstance(sender, (Channel, Chat)):
+            print("⚪ Відправник є Channel/Chat, user_info не зберігаємо.")
+            return
+
+        if not isinstance(sender, User):
+            print("⚪ Відправник невідомого типу, user_info не зберігаємо.")
+            return
+
+        # Формуємо дані у форматі, який очікує LLM. Використовуємо getattr з дефолтами,
+        # щоб уникнути помилок, якщо певні поля у User відсутні.
         profile_data = {
-            "id": sender.id,
-            "first_name": sender.first_name,
-            "last_name": sender.last_name,
+            "id": getattr(sender, "id", None),
+            "first_name": getattr(sender, "first_name", None),
+            "last_name": getattr(sender, "last_name", None),
             "username": getattr(sender, "username", None),
             "bio": getattr(sender, "about", None),
         }
