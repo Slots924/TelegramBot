@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, functions, types
 
 from settings import HISTORY_BASE_DIR, USER_INFO_FILENAME
 from .config import TELEGRAM_API_HASH, TELEGRAM_API_ID, SESSION_NAME
@@ -117,7 +117,22 @@ class TelegramAPI:
         """Ставитиме реакцію на конкретне повідомлення у чаті."""
 
         try:
-            await self.client.send_reaction(entity=chat_id, message_id=message_id, reaction=emoji)
+            try:
+                # msg_id у Telethon має бути int, тому намагаємося явно привести
+                prepared_message_id = int(message_id)
+            except Exception:
+                # Якщо не вдалось конвертувати, все одно передамо у виклик та отримаємо помилку
+                prepared_message_id = message_id
+
+            await self.client(
+                functions.messages.SendReactionRequest(
+                    peer=chat_id,
+                    msg_id=prepared_message_id,
+                    reaction=[types.ReactionEmoji(emoticon=emoji)],
+                    big=None,
+                    add_to_recent=None,
+                )
+            )
             print(
                 f"✅ Додано реакцію '{emoji}' у чаті {chat_id} для message_id={message_id}."
             )
