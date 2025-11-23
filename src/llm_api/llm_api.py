@@ -36,26 +36,7 @@ class LLMAPI:
         і повертає текст відповіді.
 
         """
-
-          # 🔍 Дебаг: дивимось, що реально відправляємо в LLM
-        print("\n================= MESSAGES, ЯКІ ЙДУТЬ У LLM =================")
-        try:
-            # окремо покажемо всі system-повідомлення
-            system_msgs = [m for m in messages if m.get("role") == "system"]
-            print("---- SYSTEM MESSAGES ----")
-            for idx, m in enumerate(system_msgs, start=1):
-                print(f"[SYSTEM #{idx}]")
-                print(m.get("content", "")[:500], "...\n")
-
-            # а також весь payload красиво (може бути довгим)
-            pretty = json.dumps(messages, ensure_ascii=False, indent=2)
-            print("---- FULL MESSAGES JSON (обрізай очима, якщо довго) ----")
-            print(pretty)
-        except Exception as exc:
-            print(f"⚠️ Не вдалося красиво вивести messages: {exc}")
-            print(messages)
-        print("============================================================\n")
-
+        
         payload = {
             "model": self.model,
             "messages": messages,
