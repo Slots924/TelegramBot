@@ -89,7 +89,13 @@ class TelegramAPI:
         print(f"\n💬 Нове повідомлення від {user_id} в чаті {chat_id}: {text}")
 
         # Перевіряємо та зберігаємо user_info.txt, якщо його ще немає
-        self._ensure_user_info_file(user_id=user_id, sender=sender)
+        chat_title = getattr(event.chat, "title", None)
+        self._ensure_user_info_file(
+            user_id=user_id,
+            sender=sender,
+            chat_title=chat_title,
+            is_private_chat=event.is_private,
+        )
 
         try:
             # Позначаємо повідомлення як прочитане, щоби Telegram не показував "непрочитано".
@@ -148,11 +154,13 @@ class TelegramAPI:
         except Exception as exc:
             print(f"⚠️ Не вдалося поставити реакцію в чаті {chat_id}: {exc}")
 
-    def _ensure_user_info_file(self, user_id: int, sender) -> None:
+    def _ensure_user_info_file(
+        self, user_id: int, sender, chat_title: str | None, is_private_chat: bool
+    ) -> None:
         """Створює user_info.txt з профільними даними, якщо його ще немає.
 
-        Якщо відправник не є користувачем (Channel/Chat/None), метод просто
-        завершує роботу без помилки.
+        Якщо відправник невідомий або файл не вдалося записати, виводимо лог, але
+        не зупиняємо роботу застосунку.
         """
 
         # Шлях до файлу з інформацією про користувача
@@ -163,34 +171,55 @@ class TelegramAPI:
         if os.path.exists(user_info_path):
             return
 
-        # Якщо відправник відсутній — нічого не записуємо, бо немає даних про профіль.
-        if sender is None:
-            print("⚪ Відправник невідомий (None), user_info не зберігаємо.")
-            return
-
-        # Якщо відправник не User (наприклад, Channel або Chat) — пропускаємо збереження,
-        # щоб уникнути AttributeError при доступі до полів first_name/last_name.
-        if isinstance(sender, (Channel, Chat)):
-            print("⚪ Відправник є Channel/Chat, user_info не зберігаємо.")
-            return
-
-        if not isinstance(sender, User):
-            print("⚪ Відправник невідомого типу, user_info не зберігаємо.")
-            return
-
-        # Формуємо дані у форматі, який очікує LLM. Використовуємо getattr з дефолтами,
-        # щоб уникнути помилок, якщо певні поля у User відсутні.
-        profile_data = {
-            "id": getattr(sender, "id", None),
-            "first_name": getattr(sender, "first_name", None),
-            "last_name": getattr(sender, "last_name", None),
-            "username": getattr(sender, "username", None),
-            "bio": getattr(sender, "about", None),
-        }
+        profile_data = self._build_profile_data(
+            sender=sender,
+            fallback_user_id=user_id,
+            chat_title=chat_title if not is_private_chat else None,
+        )
 
         try:
             with open(user_info_path, "w", encoding="utf-8") as file:
-                json.dump(profile_data, file, ensure_ascii=False, indent=2)
+                file.write(self._render_user_info_block(profile_data))
             print(f"💾 Збережено user_info для {user_id} у {user_info_path}")
         except Exception as exc:
             print(f"⚠️ Не вдалося зберегти user_info.txt для {user_id}: {exc}")
+
+    @staticmethod
+    def _build_profile_data(
+        sender, fallback_user_id: int, chat_title: str | None
+    ) -> dict:
+        """Збирає профільні дані користувача або групи в єдину структуру."""
+
+        if sender is None:
+            print("⚪ Відправник невідомий (None), заповнюю тільки наявні поля.")
+
+        profile_data = {
+            "id": getattr(sender, "id", None) if sender else fallback_user_id,
+            "first_name": getattr(sender, "first_name", None) if sender else None,
+            "last_name": getattr(sender, "last_name", None) if sender else None,
+            "username": getattr(sender, "username", None) if sender else None,
+            "bio": getattr(sender, "about", None) if sender else None,
+            "chat_title": chat_title,
+        }
+
+        if isinstance(sender, (Channel, Chat)) and not profile_data["first_name"]:
+            # Для групових чатів first_name/last_name зазвичай відсутні, тому підхоплюємо title
+            profile_data["first_name"] = getattr(sender, "title", None)
+
+        return profile_data
+
+    @staticmethod
+    def _render_user_info_block(profile_data: dict) -> str:
+        """Формує текстовий блок USER_INFO для передачі в LLM."""
+
+        # Текстовий опис про те, як використовувати метадані, додаємо перед JSON.
+        header_lines = [
+            "USER_INFO_BLOCK_START",
+            "Це структуровані метадані про користувача Telegram, з яким ти зараз ведеш діалог.",
+            "Використовуй їх лише для контексту (ім'я, стиль спілкування тощо), але НЕ показуй їх у відповідях дослівно.",
+            "",
+            f"USER_INFO = {json.dumps(profile_data, ensure_ascii=False, indent=2)}",
+            "",
+            "USER_INFO_BLOCK_END",
+        ]
+        return "\n".join(header_lines)
