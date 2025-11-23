@@ -24,7 +24,6 @@ from src.router.actions import (
     handle_fake_typing,
     handle_ignore,
     handle_send_message,
-    handle_wait,
 )
 from src.telegram_api.telegram_api import TelegramAPI
 
@@ -80,7 +79,6 @@ class LLMRouter:
             "add_reaction": handle_add_reaction,
             "fake_typing": handle_fake_typing,
             "ignore": handle_ignore,
-            "wait": handle_wait,
         }
 
         # Завантажуємо додатковий промпт з інструкціями по екшенах (якщо він увімкнений).
@@ -310,6 +308,7 @@ class LLMRouter:
             return [
                 {
                     "type": "send_message",
+                    "wait_seconds": 0,
                     "human_seconds": 0,
                     "payload": {"content": answer_raw},
                 }
@@ -318,11 +317,12 @@ class LLMRouter:
     async def _execute_actions(
         self, chat_id: int, user_id: int, actions: Sequence[dict]
     ) -> None:
-        """По черзі виконує екшени, які повернула LLM."""
+        """По черзі виконує екшени, які повернула LLM, враховуючи затримку wait_seconds."""
 
         for action in actions:
             action_type = action.get("type")
             payload = action.get("payload") or {}
+            wait_seconds = float(action.get("wait_seconds", 0) or 0)
             human_seconds = float(action.get("human_seconds", 0) or 0)
 
             handler = self._action_handlers.get(action_type)
@@ -331,6 +331,10 @@ class LLMRouter:
                 # Невідомий тип — просто пропускаємо, щоб не ламати сценарій.
                 print(f"ℹ️ Невідомий тип дії від LLM: {action_type}. Пропускаю.")
                 continue
+
+            if wait_seconds > 0:
+                # Перед виконанням будь-якої дії робимо просту паузу, якщо її вимагає LLM.
+                await asyncio.sleep(wait_seconds)
 
             await handler(
                 telegram=self.telegram,
