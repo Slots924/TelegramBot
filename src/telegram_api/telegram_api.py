@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, functions, types
 from telethon.tl.types import Channel, Chat, User
 
 from settings import HISTORY_BASE_DIR, USER_INFO_FILENAME
@@ -135,21 +135,47 @@ class TelegramAPI:
             print(f"⚠️ Не вдалося показати статус typing у чаті {chat_id}: {exc}")
 
     async def send_reaction(self, chat_id: int | str, message_id: int | str, emoji: str) -> None:
-        """Ставитиме реакцію на конкретне повідомлення у чаті."""
+        """Ставитиме реакцію на конкретне повідомлення у чаті.
+
+        Параметри
+        ----------
+        chat_id: int | str
+            Ідентифікатор чату. Має бути додатнім цілим числом, інакше Telethon не зможе
+            знайти потрібний діалог для реакції.
+        message_id: int | str
+            Ідентифікатор повідомлення, на яке ставимо реакцію.
+        emoji: str
+            Емодзі, яке потрібно додати як реакцію.
+        """
 
         try:
-            # Telethon високорівневий метод очікує ціле message_id, тому намагаємося привести
+            # Telethon низькорівневий метод працює тільки з цілими числами, тому конвертуємо.
+            prepared_chat_id = int(chat_id)
             prepared_message_id = int(message_id)
 
-            await self.client.send_reaction(
-                entity=chat_id,
-                message=prepared_message_id,
-                reaction=emoji,
-                big=False,
-                add_to_recent=False,
+            # Якщо chat_id вийшов від'ємним (наприклад, для каналів/груп), реакція не
+            # спрацює, тому одразу логуємо і завершуємо обробку.
+            if prepared_chat_id <= 0:
+                print(
+                    "⚠️ chat_id має бути додатнім числом для надсилання реакції. "
+                    f"Отримано: {prepared_chat_id}. Пропускаю запит."
+                )
+                return
+
+            # Використовуємо functions.messages.SendReactionRequest, бо високорівневий
+            # client.send_reaction у нас не спрацьовував для збережених сесій.
+            await self.client(
+                functions.messages.SendReactionRequest(
+                    peer=prepared_chat_id,
+                    msg_id=prepared_message_id,
+                    reaction=[types.ReactionEmoji(emoticon=emoji)],
+                    big=False,
+                    add_to_recent=False,
+                )
             )
+
             print(
-                f"✅ Додано реакцію '{emoji}' у чаті {chat_id} для message_id={message_id}."
+                f"✅ Додано реакцію '{emoji}' у чаті {prepared_chat_id} для message_id={prepared_message_id}."
             )
         except Exception as exc:
             print(f"⚠️ Не вдалося поставити реакцію в чаті {chat_id}: {exc}")
