@@ -188,6 +188,19 @@ class LLMRouter:
                 print(f"❌ Помилка при виклику LLM для {user_id}: {exc}")
                 answer_raw = "[]"
 
+
+                 # 🔍 Дебаг: подивитись сирий респонс від LLM у консолі
+            print("\n================= RAW LLM RESPONSE =================")
+            try:
+                parsed = json.loads(answer_raw)
+                pretty = json.dumps(parsed, ensure_ascii=False, indent=2)
+                print(pretty)
+            except Exception:
+                # Якщо це не валідний JSON – просто друкуємо як є
+                print(answer_raw)
+            print("====================================================\n")
+            
+
             actions = self._parse_actions(answer_raw)
             await self._execute_actions(chat_id=chat_id, user_id=user_id, actions=actions)
         finally:

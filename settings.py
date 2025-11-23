@@ -24,7 +24,7 @@ HISTORY_MAX_MESSAGES_PER_CHUNK = 20
 HISTORY_MAX_CHUNKS_FOR_CONTEXT = 5
 
 # System prompts
-SYSTEM_PROMPT_NAME = "long_dialoge"         # ім'я файлу без .txt
+SYSTEM_PROMPT_NAME = "default"         # ім'я файлу без .txt
 SYSTEM_PROMPTS_DIR = os.path.join(DATA_DIR, "system_prompts")
 # Додаткові перемикачі системних промптів
 ACTIONS_SYSTEM_PROMPT = True   # чи додавати інструкцію з data/system_prompts/actions.txt
