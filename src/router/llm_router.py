@@ -11,11 +11,11 @@ from typing import Awaitable, Callable, Dict, List, Optional, Sequence
 
 from settings import (
     ACTIONS_SYSTEM_PROMPT,
+    DEBOUNCE_SECONDS,
     HISTORY_BASE_DIR,
     USER_INFO_FILENAME,
     USER_INFO_SYSTEM_PROMPT,
 )
-from src.config.settings import DEBOUNCE_SECONDS
 from src.history.history_manager import HistoryManager
 from src.llm_api.llm_api import LLMAPI
 from src.llm_api.utils.loader import load_optional_prompt
@@ -220,11 +220,14 @@ class LLMRouter:
     def _build_llm_messages(self, user_id: int) -> List[dict]:
         """Формує список повідомлень для LLM з урахуванням системних промптів та історії."""
 
-        messages_for_llm: List[dict] = [{"role": "system", "content": self.system_prompt}]
+        messages_for_llm: List[dict] = []
 
-        # Додаємо інструкцію про actions, якщо вона увімкнена та файл існує.
+        # Додаємо інструкцію про actions першою, щоб LLM одразу бачила формат очікуваних дій.
         if ACTIONS_SYSTEM_PROMPT and self.actions_prompt:
             messages_for_llm.append({"role": "system", "content": self.actions_prompt})
+
+        # Базовий системний промпт завжди йде після інструкцій до дій.
+        messages_for_llm.append({"role": "system", "content": self.system_prompt})
 
         # Підхоплюємо user_info.txt як системний промпт, якщо цього вимагають налаштування.
         if USER_INFO_SYSTEM_PROMPT:
@@ -259,9 +262,8 @@ class LLMRouter:
 
         try:
             with open(user_info_path, "r", encoding="utf-8") as file:
-                data = json.load(file)
-            # Передаємо LLM короткий системний блок із даними профілю.
-            return f"USER_INFO\n{json.dumps(data, ensure_ascii=False, indent=2)}"
+                content = file.read().strip()
+            return content
         except Exception as exc:
             print(f"⚠️ Не вдалося прочитати user_info.txt для {user_id}: {exc}")
             return None
