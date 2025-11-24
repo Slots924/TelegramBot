@@ -53,7 +53,7 @@ def _get_float_env(var_name: str, default: float) -> float:
         return default
 
 
-DEBOUNCE_SECONDS: float = _get_float_env("DEBOUNCE_SECONDS", 1)
+DEBOUNCE_SECONDS: float = _get_float_env("DEBOUNCE_SECONDS", 12)
 """float: затримка перед запуском чергового циклу відповіді LLM."""
 
 TYPING_SECONDS_DEFAULT: float = _get_float_env("TYPING_SECONDS_DEFAULT", 15.0)
@@ -78,7 +78,7 @@ def get_typing_duration(answer_text: str) -> float:
     return TYPING_SECONDS_DEFAULT
 
 # Налаштування LLM (параметри запиту)
-LLM_TEMPERATURE = 1.2
+LLM_TEMPERATURE = 1
 LLM_MAX_TOKENS = 1024
 LLM_TOP_P = 0.92
 # Параметри поки не використовуються в запитах, але читаємо їх для майбутніх доробок
