@@ -23,6 +23,7 @@ from src.router.actions import (
     handle_add_reaction,
     handle_fake_typing,
     handle_ignore,
+    handle_send_messages,
     handle_send_message,
 )
 from src.telegram_api.telegram_api import TelegramAPI
@@ -75,6 +76,7 @@ class LLMRouter:
             ],
         ] = {
             "send_message": handle_send_message,
+            "send_messages": handle_send_messages,
             "add_reaction": handle_add_reaction,
             "fake_typing": handle_fake_typing,
             "ignore": handle_ignore,
