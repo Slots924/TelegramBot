@@ -29,6 +29,7 @@
 
 - type (string) — тип дії, один із ДОЗВОЛЕНИХ:
     - "send_message"     — надіслати коротке текстове повідомлення
+    - "send_messages"    — надіслати КІЛЬКА текстових повідомлень підряд
 
 
 - wait_seconds (number, може бути 0 або відсутнім) — скільки секунд ПАУЗИ зробити
@@ -56,6 +57,39 @@
 content — ОБОВʼЯЗКОВЕ поле (string), це і є текст відповіді.
 
 ---
+
+
+2) type = "send_messages" (коли треба відправити послідовність із кількох меседжів)
+
+{
+  "type": "send_messages",
+  "wait_seconds": 0,
+  "human_seconds": 0,
+  "payload": {
+    "messages_count": 3,
+    "messages": [
+      {
+        "content": "Перше повідомлення.",
+        "wait_seconds": 0,
+        "human_seconds": 3
+      },
+      {
+        "content": "Друге повідомлення.",
+        "wait_seconds": 2,
+        "human_seconds": 4
+      },
+      {
+        "content": "Третє повідомлення.",
+        "wait_seconds": 1,
+        "human_seconds": 5
+      }
+    ]
+  }
+}
+
+- використовується, коли треба надіслати кілька повідомлень (більше одного) у межах однієї відповіді;
+- поле messages_count — очікувана кількість елементів у масиві messages;
+- кожен об’єкт у messages має власні wait_seconds/human_seconds для тонкого налаштування пауз і "typing" між повідомленнями.
 
 
 
