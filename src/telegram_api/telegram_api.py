@@ -83,7 +83,6 @@ class TelegramAPI:
 
         chat_id = event.chat_id      # ID чату (для приватного = user_id)
         text = event.message.message # текст повідомлення
-        message_id = event.message.id
         message_date = event.message.date or datetime.now(timezone.utc)
 
         print(f"\n💬 Нове повідомлення від {user_id} в чаті {chat_id}: {text}")
@@ -109,7 +108,6 @@ class TelegramAPI:
             user_id=user_id,
             chat_id=chat_id,
             text=text,
-            message_id=message_id,
             message_time=message_date,
         )
 

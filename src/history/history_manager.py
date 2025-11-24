@@ -4,7 +4,7 @@ history_manager.py — керування історією діалогів дл
 Ідея:
 - Для кожного користувача є своя папка:  .../history/user_<user_id>/
 - В ній лежать чанки: chunk_0001.json, chunk_0002.json, ...
-- В кожному чанку — список messages[] (role, content, created_at, message_id).
+- В кожному чанку — список messages[] (role, content, created_at, raw_response).
 
 HistoryManager:
 - додає нові повідомлення в останній чанк (або створює новий)
@@ -119,17 +119,17 @@ class HistoryManager:
         self,
         user_id: int,
         role: str,
-        content: str,
-        message_id: int | str | None = None,
+        content: str | None,
         message_time_iso: str | None = None,
+        raw_response: Any | None = None,
     ) -> None:
         """
         Додає нове повідомлення користувача або асистента в історію.
 
         role: "user" або "assistant"
-        content: текст повідомлення
-        message_id: Telegram message_id, якщо потрібно відслідковувати оригінал
+        content: текст повідомлення (для сирих LLM-відповідей може бути None)
         message_time_iso: час, коли повідомлення надійшло/було відправлено (ISO UTC)
+        raw_response: повна відповідь від LLM (наприклад, JSON), якщо треба зберегти її цілком
         """
         # Визначаємо, куди писати — в останній чанк або створити новий
         last_chunk_path = self._get_last_chunk_path(user_id)
@@ -172,9 +172,11 @@ class HistoryManager:
             "content": content,
             # Коли точно було відправлено/отримано повідомлення.
             "created_at": message_time_iso or self._now_iso(),
-            # Telegram message_id допоможе LLM ставити реакції або робити реплаї.
-            "message_id": message_id,
         }
+
+        # За потреби додаємо повну сирцю відповідь від LLM, щоб її можна було відновити.
+        if raw_response is not None:
+            message["raw_response"] = raw_response
         chunk_data["messages"].append(message)
         chunk_data["meta"]["updated_at"] = self._now_iso()
 

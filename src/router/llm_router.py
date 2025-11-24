@@ -44,7 +44,6 @@ class ReceivedMessage:
     """Описує вхідне повідомлення у внутрішній черзі."""
 
     text: str
-    message_id: int | str | None
     message_time_iso: str | None
 
 
@@ -90,7 +89,6 @@ class LLMRouter:
         user_id: int,
         chat_id: int,
         text: str,
-        message_id: int | str | None,
         message_time: datetime,
     ) -> None:
         """Реєструє нове повідомлення та за потреби запускає debounce."""
@@ -100,7 +98,6 @@ class LLMRouter:
         state.inbox.append(
             ReceivedMessage(
                 text=text,
-                message_id=message_id,
                 message_time_iso=message_time_iso,
             )
         )
@@ -174,7 +171,6 @@ class LLMRouter:
                     user_id=user_id,
                     role="user",
                     content=message.text,
-                    message_id=message.message_id,
                     message_time_iso=message.message_time_iso,
                 )
 
@@ -186,8 +182,7 @@ class LLMRouter:
                 print(f"❌ Помилка при виклику LLM для {user_id}: {exc}")
                 answer_raw = "[]"
 
-
-                 # 🔍 Дебаг: подивитись сирий респонс від LLM у консолі
+            # 🔍 Дебаг: подивитись сирий респонс від LLM у консолі
             print("\n================= RAW LLM RESPONSE =================")
             try:
                 parsed = json.loads(answer_raw)
@@ -197,6 +192,14 @@ class LLMRouter:
                 # Якщо це не валідний JSON – просто друкуємо як є
                 print(answer_raw)
             print("====================================================\n")
+
+            # Зберігаємо повну відповідь LLM у історію, щоб не втрачати жодного поля з JSON.
+            self.history.append_message(
+                user_id=user_id,
+                role="assistant",
+                content=None,
+                raw_response=answer_raw,
+            )
             
 
             actions = self._parse_actions(answer_raw)
@@ -245,7 +248,6 @@ class LLMRouter:
             formatted_content = self._format_history_content(
                 content=content,
                 created_at=item.get("created_at"),
-                message_id=item.get("message_id"),
             )
             messages_for_llm.append({"role": role, "content": formatted_content})
 
@@ -272,15 +274,12 @@ class LLMRouter:
     def _format_history_content(
         content: str,
         created_at: Optional[str],
-        message_id: Optional[int | str],
     ) -> str:
-        """Додає до тексту повідомлення метадані, щоб LLM бачила час та message_id."""
+        """Додає до тексту повідомлення метадані, щоб LLM бачила час надсилання."""
 
         meta_parts: List[str] = []
         if created_at:
             meta_parts.append(f"sent_at={created_at}")
-        if message_id:
-            meta_parts.append(f"message_id={message_id}")
 
         if not meta_parts:
             return content
