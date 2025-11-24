@@ -27,7 +27,7 @@ HISTORY_MAX_MESSAGES_PER_CHUNK = 20
 HISTORY_MAX_CHUNKS_FOR_CONTEXT = 5
 
 # System prompts
-SYSTEM_PROMPT_NAME = "long_dialoge"         # ім'я файлу без .txt
+SYSTEM_PROMPT_NAME = "default"         # ім'я файлу без .txt
 SYSTEM_PROMPTS_DIR = os.path.join(DATA_DIR, "system_prompts")
 # Додаткові перемикачі системних промптів
 ACTIONS_SYSTEM_PROMPT = True   # чи додавати інструкцію з data/system_prompts/actions.txt
@@ -78,7 +78,7 @@ def get_typing_duration(answer_text: str) -> float:
     return TYPING_SECONDS_DEFAULT
 
 # Налаштування LLM (параметри запиту)
-LLM_TEMPERATURE = 0.95
+LLM_TEMPERATURE = 1.2
 LLM_MAX_TOKENS = 1024
 LLM_TOP_P = 0.92
 # Параметри поки не використовуються в запитах, але читаємо їх для майбутніх доробок
