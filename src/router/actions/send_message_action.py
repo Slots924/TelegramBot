@@ -42,12 +42,11 @@ async def handle_send_message(
             if getattr(message, "date", None)
             else datetime.now(timezone.utc).isoformat()
         )
-        # Додаємо відповідь бота до історії з метаданими про час та message_id.
+        # Додаємо відповідь бота до історії з метаданими про час.
         history.append_message(
             user_id=user_id,
             role="assistant",
             content=content,
-            message_id=getattr(message, "id", None),
             message_time_iso=message_time_iso,
         )
     except Exception as exc:
