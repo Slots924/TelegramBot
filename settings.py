@@ -35,7 +35,7 @@ USER_INFO_FILENAME = "user_info.txt"
 # ──────────────────────────────────────────────────────────────
 
 # Основний системний промпт (без .txt)
-SYSTEM_PROMPT_NAME = "default"
+SYSTEM_PROMPT_NAME = "davinchi"
 
 # Папка з системними промптами
 SYSTEM_PROMPTS_DIR = os.path.join(DATA_DIR, "system_prompts")
