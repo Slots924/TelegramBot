@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.history.history_manager import HistoryManager
@@ -39,3 +40,15 @@ async def handle_add_reaction(
         await asyncio.sleep(human_seconds)
 
     await telegram.send_reaction(chat_id, target_message_id, emoji)
+
+    # Фіксуємо у історії, що асистент поставив реакцію на повідомлення користувача.
+    history.append_message(
+        user_id=user_id,
+        role="assistant",
+        content=(
+            f"[REACTION] Асистент поставив '{emoji}' "
+            f"на повідомлення з ID {target_message_id}"
+        ),
+        message_time_iso=datetime.now(timezone.utc).isoformat(),
+        message_id=target_message_id,
+    )
