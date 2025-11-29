@@ -186,7 +186,12 @@ class LLMRouter:
                     message_id=message.message_id,
                 )
 
+
+
             messages_for_llm = self._build_llm_messages(user_id=user_id)
+
+             # 🔍 Дебаг історії + системних промптів
+            self._debug_print_llm_messages(user_id=user_id, messages=messages_for_llm)
 
             try:
                 answer_raw = await asyncio.to_thread(self.llm.generate, messages_for_llm)
@@ -390,3 +395,40 @@ class LLMRouter:
 
         # Для wait, fake_typing, ignore нічого додатково не потрібно.
         return {}
+
+
+    def _debug_print_llm_messages(self, user_id: int, messages: list[dict]) -> None:
+        """Друкує в консоль, що саме ми відправляємо в LLM (системні + історія).
+
+        Щоб не засмічувати логи, показуємо лише останні ~10 не-system повідомлень.
+        """
+
+        print("\n================= LLM MESSAGES DEBUG =================")
+        print(f"👤 user_id = {user_id}")
+        print("---- SYSTEM MESSAGES ----")
+
+        for m in messages:
+            if m.get("role") == "system":
+                content = m.get("content", "")
+                print("SYSTEM:")
+                print(content[:500], "...\n")
+
+        print("---- HISTORY (user/assistant) ----")
+        # Вибираємо тільки user/assistant
+        history_msgs = [m for m in messages if m.get("role") in ("user", "assistant")]
+
+        # Беремо хвіст, щоб не спамити
+        tail = history_msgs[-10:]
+
+        for i, m in enumerate(tail, start=1):
+            role = m.get("role")
+            content = m.get("content", "")
+
+            # Трохи підчистимо перенос першого рядка
+            one_line_preview = content.replace("\n", "\\n")
+            if len(one_line_preview) > 200:
+                one_line_preview = one_line_preview[:200] + "..."
+
+            print(f"[{i}] {role.upper()}: {one_line_preview}")
+
+        print("=============== END LLM MESSAGES DEBUG ===============\n")
