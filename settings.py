@@ -36,46 +36,27 @@ USER_INFO_SYSTEM_PROMPT = True # чи передавати LLM системни�
 # Назва файлу з інформацією про користувача всередині dialogs/user_<id>
 USER_INFO_FILENAME = "user_info.txt"
 
+# Чи відповідаємо на повідомлення від телеграм-ботів (за замовчуванням ні)
+ANSWER_TO_TELEGRAM_BOTS = os.getenv("ANSWER_TO_TELEGRAM_BOTS", "False").lower() == "true"
 
-def _get_float_env(var_name: str, default: float) -> float:
-    """Пробує прочитати float зі змінної середовища або повертає дефолтне значення."""
-
-    raw_value = os.getenv(var_name)
-    if raw_value is None:
-        return default
-
-    try:
-        return float(raw_value)
-    except ValueError:
-        print(
-            f"⚠️ Неможливо конвертувати змінну {var_name}='{raw_value}' у float. Використовую дефолт {default}."
-        )
-        return default
-
-
-DEBOUNCE_SECONDS: float = _get_float_env("DEBOUNCE_SECONDS", 12)
+# Просте читання числових налаштувань з env із запасним дефолтом
+try:
+    DEBOUNCE_SECONDS: float = float(os.getenv("DEBOUNCE_SECONDS", "12"))
+except ValueError:
+    print(
+        "⚠️ Неможливо конвертувати DEBOUNCE_SECONDS у float. Використовую дефолт 12."
+    )
+    DEBOUNCE_SECONDS = 12.0
 """float: затримка перед запуском чергового циклу відповіді LLM."""
 
-TYPING_SECONDS_DEFAULT: float = _get_float_env("TYPING_SECONDS_DEFAULT", 15.0)
+try:
+    TYPING_SECONDS_DEFAULT: float = float(os.getenv("TYPING_SECONDS_DEFAULT", "15.0"))
+except ValueError:
+    print(
+        "⚠️ Неможливо конвертувати TYPING_SECONDS_DEFAULT у float. Використовую дефолт 15.0."
+    )
+    TYPING_SECONDS_DEFAULT = 15.0
 """float: базова тривалість імітації набору тексту у Telegram."""
-
-
-def get_typing_duration(answer_text: str) -> float:
-    """Обчислює, скільки секунд імітувати набір відповіді, поки що повертає константу.
-
-    Parameters
-    ----------
-    answer_text: str
-        Текст, який плануємо відправити користувачу.
-
-    Returns
-    -------
-    float
-        Кількість секунд, протягом яких показуємо статус "typing".
-    """
-
-    _ = answer_text
-    return TYPING_SECONDS_DEFAULT
 
 # Налаштування LLM (параметри запиту)
 LLM_TEMPERATURE = 1

@@ -4,7 +4,7 @@ history_manager.py — керування історією діалогів дл
 Ідея:
 - Для кожного користувача є своя папка:  .../history/user_<user_id>/
 - В ній лежать чанки: chunk_0001.json, chunk_0002.json, ...
-- В кожному чанку — список messages[] (role, content, created_at, raw_response).
+- В кожному чанку — список messages[] (role, content, created_at, message_id).
 
 HistoryManager:
 - додає нові повідомлення в останній чанк (або створює новий)
@@ -121,15 +121,16 @@ class HistoryManager:
         role: str,
         content: str | None,
         message_time_iso: str | None = None,
-        raw_response: Any | None = None,
+        message_id: int | None = None,
     ) -> None:
         """
         Додає нове повідомлення користувача або асистента в історію.
 
         role: "user" або "assistant"
         content: текст повідомлення (для сирих LLM-відповідей може бути None)
-        message_time_iso: час, коли повідомлення надійшло/було відправлено (ISO UTC)
-        raw_response: повна відповідь від LLM (наприклад, JSON), якщо треба зберегти її цілком
+        message_time_iso: час, коли повідомлення надійшло/було відправлено (ISO UTC),
+            збережеться у форматі YYYY-MM-DDTHH:MM:SS
+        message_id: ідентифікатор повідомлення у Telegram (якщо він відомий)
         """
         # Визначаємо, куди писати — в останній чанк або створити новий
         last_chunk_path = self._get_last_chunk_path(user_id)
@@ -170,13 +171,10 @@ class HistoryManager:
         message = {
             "role": role,
             "content": content,
-            # Коли точно було відправлено/отримано повідомлення.
-            "created_at": message_time_iso or self._now_iso(),
+            # Коли точно було відправлено/отримано повідомлення (UTC без інформації про часовий пояс).
+            "created_at": self._normalize_created_at(message_time_iso),
+            "message_id": message_id,
         }
-
-        # За потреби додаємо повну сирцю відповідь від LLM, щоб її можна було відновити.
-        if raw_response is not None:
-            message["raw_response"] = raw_response
         chunk_data["messages"].append(message)
         chunk_data["meta"]["updated_at"] = self._now_iso()
 
@@ -211,5 +209,25 @@ class HistoryManager:
 
     @staticmethod
     def _now_iso() -> str:
-        """Повертає поточний час у ISO-форматі (UTC)."""
-        return datetime.now(timezone.utc).isoformat()
+        """Повертає поточний час у форматі YYYY-MM-DDTHH:MM:SS (UTC)."""
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+    @staticmethod
+    def _normalize_created_at(message_time_iso: str | None) -> str:
+        """
+        Приводить довільний ISO-час до формату без мікросекунд і таймзони.
+
+        Якщо парсинг не вдався — повертає поточний момент у правильному форматі.
+        """
+
+        if not message_time_iso:
+            return HistoryManager._now_iso()
+
+        try:
+            prepared_value = message_time_iso.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(prepared_value)
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(timezone.utc)
+            return parsed.strftime("%Y-%m-%dT%H:%M:%S")
+        except Exception:
+            return HistoryManager._now_iso()
