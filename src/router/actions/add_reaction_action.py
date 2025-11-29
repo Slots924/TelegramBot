@@ -41,16 +41,13 @@ async def handle_add_reaction(
 
     await telegram.send_reaction(chat_id, target_message_id, emoji)
 
-    # Фіксуємо у історії, що асистент поставив реакцію на повідомлення користувача.
+    # Фіксуємо у історії, що асистент поставив реакцію на повідомлення користувача,
+    # уніфіковуючи формат запису для подальшого використання LLM.
     history.append_message(
         user_id=user_id,
         role="assistant",
-        content=(
-            f"[REACTION] Асистент поставив '{emoji}' "
-            f"на повідомлення з ID {target_message_id}"
-        ),
+        content=f"[REACTION] '{emoji}' on message_id = {target_message_id}",
         message_time_iso=datetime.now(timezone.utc).isoformat(),
-        # Для реакцій не зберігаємо message_id, щоб у історії було очевидно,
-        # що це просто факт реакції, а не звичайне повідомлення.
-        message_id=None,
+        # Зберігаємо ID цільового повідомлення, щоб контекст містив потрібну прив'язку.
+        message_id=target_message_id,
     )
