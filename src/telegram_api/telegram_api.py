@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from telethon import TelegramClient, events, functions, types
+from telethon import TelegramClient, events, functions, types, utils
 from telethon.tl.types import Channel, Chat, User
 
 from settings import ANSWER_TO_TELEGRAM_BOTS, HISTORY_BASE_DIR, USER_INFO_FILENAME
@@ -31,6 +31,8 @@ class TelegramAPI:
             self._on_new_message,
             events.NewMessage(incoming=True)
         )
+        # Ловимо оновлення по реакціях, щоб фіксувати, як користувачі реагують на наші відповіді.
+        self.client.add_event_handler(self._on_message_reaction, events.Raw())
 
     def set_router(self, router) -> None:
         """Прив'язуємо роутер, який буде обробляти вхідні повідомлення."""
@@ -147,21 +149,15 @@ class TelegramAPI:
         """
 
         try:
-            # Telethon низькорівневий метод працює тільки з цілими числами, тому конвертуємо.
-            prepared_chat_id = int(chat_id)
+            # Перетворюємо chat_id на додатнє число, оскільки Telethon очікує саме такий формат.
+            prepared_chat_id = abs(int(chat_id))
             prepared_message_id = int(message_id)
+        except (TypeError, ValueError) as exc:
+            print(f"⚠️ Неможливо підготувати ідентифікатори для реакції: {exc}")
+            return
 
-            # Якщо chat_id вийшов від'ємним (наприклад, для каналів/груп), реакція не
-            # спрацює, тому одразу логуємо і завершуємо обробку.
-            if prepared_chat_id <= 0:
-                print(
-                    "⚠️ chat_id має бути додатнім числом для надсилання реакції. "
-                    f"Отримано: {prepared_chat_id}. Пропускаю запит."
-                )
-                return
-
-            # Використовуємо functions.messages.SendReactionRequest, бо високорівневий
-            # client.send_reaction у нас не спрацьовував для збережених сесій.
+        try:
+            # Використовуємо низькорівневий запит, який стабільно працює із збереженими сесіями.
             await self.client(
                 functions.messages.SendReactionRequest(
                     peer=prepared_chat_id,
@@ -177,6 +173,44 @@ class TelegramAPI:
             )
         except Exception as exc:
             print(f"⚠️ Не вдалося поставити реакцію в чаті {chat_id}: {exc}")
+
+    async def _on_message_reaction(self, update) -> None:
+        """Реагує на оновлення реакцій і записує їх в історію діалогу.
+
+        Запускається для сирих апдейтів Telethon. Ми відфільтровуємо лише UpdateMessageReactions,
+        витягуємо користувача та емодзі, після чого зберігаємо факт реакції в історії.
+        """
+
+        if self._router is None:
+            return
+
+        if not isinstance(update, types.UpdateMessageReactions):
+            return
+
+        if not update.reactions or not update.reactions.recent_reactions:
+            return
+
+        chat_id = utils.get_peer_id(update.peer)
+        message_id = getattr(update, "msg_id", None)
+        message_time_iso = (
+            update.date.astimezone(timezone.utc).isoformat()
+            if getattr(update, "date", None)
+            else datetime.now(timezone.utc).isoformat()
+        )
+
+        for recent_reaction in update.reactions.recent_reactions:
+            user_id = utils.get_peer_id(recent_reaction.peer_id)
+            emoji = getattr(recent_reaction.reaction, "emoticon", None) or "(unknown)"
+            self._router.history.append_message(
+                user_id=user_id,
+                role="user",
+                content=(
+                    f"[REACTION] Користувач {user_id} поставив '{emoji}' "
+                    f"на повідомлення з ID {message_id} у чаті {chat_id}"
+                ),
+                message_time_iso=message_time_iso,
+                message_id=message_id,
+            )
 
     def _ensure_user_info_file(
         self, user_id: int, sender, chat_title: str | None, is_private_chat: bool
