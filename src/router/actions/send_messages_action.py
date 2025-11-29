@@ -62,12 +62,14 @@ async def handle_send_messages(
                 if getattr(message, "date", None)
                 else datetime.now(timezone.utc).isoformat()
             )
+            message_id = getattr(message, "id", None)
             # Фіксуємо кожне відправлене повідомлення бота в історії.
             history.append_message(
                 user_id=user_id,
                 role="assistant",
                 content=content,
                 message_time_iso=message_time_iso,
+                message_id=message_id,
             )
         except Exception as exc:
             # Не кидаємо помилку вище, щоб не зірвати відправку наступних меседжів.

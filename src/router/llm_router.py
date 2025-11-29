@@ -42,10 +42,11 @@ class UserState:
 
 @dataclass
 class ReceivedMessage:
-    """Описує вхідне повідомлення у внутрішній черзі."""
+    """Описує вхідне повідомлення у внутрішній черзі (текст, час, message_id)."""
 
     text: str
     message_time_iso: str | None
+    message_id: int | None
 
 
 class LLMRouter:
@@ -92,8 +93,12 @@ class LLMRouter:
         chat_id: int,
         text: str,
         message_time: datetime,
+        message_id: int | None = None,
     ) -> None:
-        """Реєструє нове повідомлення та за потреби запускає debounce."""
+        """Реєструє нове повідомлення та за потреби запускає debounce.
+
+        message_id передаємо, щоб зберегти у історії точний зв'язок із Telegram.
+        """
 
         state = self._get_state(user_id)
         message_time_iso = message_time.astimezone(timezone.utc).isoformat()
@@ -101,6 +106,7 @@ class LLMRouter:
             ReceivedMessage(
                 text=text,
                 message_time_iso=message_time_iso,
+                message_id=message_id,
             )
         )
         state.last_activity = datetime.now(timezone.utc)
@@ -174,6 +180,7 @@ class LLMRouter:
                     role="user",
                     content=message.text,
                     message_time_iso=message.message_time_iso,
+                    message_id=message.message_id,
                 )
 
             messages_for_llm = self._build_llm_messages(user_id=user_id)
@@ -194,15 +201,6 @@ class LLMRouter:
                 # Якщо це не валідний JSON – просто друкуємо як є
                 print(answer_raw)
             print("====================================================\n")
-
-            # Зберігаємо повну відповідь LLM у історію, щоб не втрачати жодного поля з JSON.
-            self.history.append_message(
-                user_id=user_id,
-                role="assistant",
-                content=None,
-                raw_response=answer_raw,
-            )
-            
 
             actions = self._parse_actions(answer_raw)
             await self._execute_actions(chat_id=chat_id, user_id=user_id, actions=actions)

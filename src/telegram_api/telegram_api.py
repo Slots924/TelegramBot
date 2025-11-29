@@ -6,12 +6,8 @@ from datetime import datetime, timezone
 from telethon import TelegramClient, events, functions, types
 from telethon.tl.types import Channel, Chat, User
 
-from settings import HISTORY_BASE_DIR, USER_INFO_FILENAME
+from settings import ANSWER_TO_TELEGRAM_BOTS, HISTORY_BASE_DIR, USER_INFO_FILENAME
 from .config import TELEGRAM_API_HASH, TELEGRAM_API_ID, SESSION_NAME
-
-
-ALLOWED_GROUP_CHAT_ID = -2073290710526
-
 
 class TelegramAPI:
     """Клас-обгортка для Telegram-клієнта (Telethon)."""
@@ -63,9 +59,8 @@ class TelegramAPI:
         Внутрішній обробник Telethon.
         Викликається щоразу, коли приходить нове вхідне повідомлення.
         """
-        # 🔴 Хотфікс: обробляємо тільки приватні чати + одну дозволену групу
-        if not event.is_private and event.chat_id != ALLOWED_GROUP_CHAT_ID:
-            print(f"⚪ Ігнорую чат {event.chat_id} (не приватний і не дозволена група).")
+        # Обробляємо тільки приватні діалоги, групи та канали пропускаємо без логів.
+        if not event.is_private:
             return
 
         if self._router is None:
@@ -73,6 +68,10 @@ class TelegramAPI:
             return
 
         sender = await event.get_sender()
+
+        # Ігноруємо телеграм-ботів, якщо це заборонено налаштуванням.
+        if not ANSWER_TO_TELEGRAM_BOTS and isinstance(sender, User) and getattr(sender, "bot", False):
+            return
 
         # Безпечний витяг ID відправника: беремо з sender або з самого event
         # (наприклад, якщо sender == None для анонімних адмінів чи каналів).
@@ -109,6 +108,7 @@ class TelegramAPI:
             chat_id=chat_id,
             text=text,
             message_time=message_date,
+            message_id=getattr(event.message, "id", None),
         )
 
     async def send_typing(self, chat_id: int | str, duration: float) -> None:
