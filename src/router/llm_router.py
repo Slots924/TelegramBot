@@ -256,6 +256,7 @@ class LLMRouter:
             formatted_content = self._format_history_content(
                 content=content,
                 created_at=item.get("created_at"),
+                message_id=item.get("message_id"),
             )
             messages_for_llm.append({"role": role, "content": formatted_content})
 
@@ -282,18 +283,20 @@ class LLMRouter:
     def _format_history_content(
         content: str,
         created_at: Optional[str],
+        message_id: Optional[int],
     ) -> str:
-        """Додає до тексту повідомлення метадані, щоб LLM бачила час надсилання."""
+        """Готує рядок для LLM у форматі "date | message_id | message"."""
 
-        meta_parts: List[str] = []
-        if created_at:
-            meta_parts.append(f"sent_at={created_at}")
+        # Навіть якщо якихось метаданих немає, все одно формуємо явний текст,
+        # щоб модель бачила структуру і могла ліпше відновити контекст діалогу.
+        date_value = created_at or "unknown"
+        message_id_value = message_id if message_id is not None else "unknown"
 
-        if not meta_parts:
-            return content
-
-        meta_header = " | ".join(meta_parts)
-        return f"[{meta_header}]\n{content}"
+        return (
+            f"date: {date_value} | "
+            f"message_id: {message_id_value} | "
+            f"message: {content}"
+        )
 
     @staticmethod
     def _parse_actions(answer_raw: str) -> List[dict]:

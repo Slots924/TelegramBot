@@ -201,17 +201,16 @@ class TelegramAPI:
         for recent_reaction in update.reactions.recent_reactions:
             user_id = utils.get_peer_id(recent_reaction.peer_id)
             emoji = getattr(recent_reaction.reaction, "emoticon", None) or "(unknown)"
+
+            # Фіксуємо простановку реакції у історії з чітким форматом, який читається як людьми, так і LLM.
             self._router.history.append_message(
                 user_id=user_id,
                 role="user",
-                content=(
-                    f"[REACTION] Користувач {user_id} поставив '{emoji}' "
-                    f"на повідомлення з ID {message_id} у чаті {chat_id}"
-                ),
+                content=f"[REACTION] '{emoji}' on message_id = {message_id}",
                 message_time_iso=message_time_iso,
-                # Для реакцій зберігаємо message_id як None, щоб у історії
-                # явно показати, що це не окреме текстове повідомлення.
-                message_id=None,
+                # Зберігаємо ID повідомлення, на яке поставили реакцію, щоб
+                # у контексті можна було зв'язати реакцію з конкретним меседжем.
+                message_id=message_id,
             )
 
     def _ensure_user_info_file(
