@@ -28,7 +28,10 @@ async def handle_send_message(
     - human_seconds: скільки секунд потрібно імітувати набір перед відправкою.
     """
 
-    content = payload.get("content")
+    content = payload.get("content") if isinstance(payload, dict) else None
+    # На всяк випадок дозволяємо передати текст напряму без словника payload.
+    if not content and isinstance(payload, str):
+        content = payload
     if not content:
         return
 

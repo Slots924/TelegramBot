@@ -25,6 +25,7 @@ from src.router.actions import (
     handle_ignore,
     handle_send_messages,
     handle_send_message,
+    handle_wait,
 )
 from src.telegram_api.telegram_api import TelegramAPI
 
@@ -79,8 +80,10 @@ class LLMRouter:
             "send_message": handle_send_message,
             "send_messages": handle_send_messages,
             "add_reaction": handle_add_reaction,
+            "react_to_message": handle_add_reaction,
             "fake_typing": handle_fake_typing,
             "ignore": handle_ignore,
+            "wait": handle_wait,
         }
 
         # Завантажуємо додатковий промпт з інструкціями по екшенах (якщо він увімкнений).
@@ -311,7 +314,7 @@ class LLMRouter:
                     "type": "send_message",
                     "wait_seconds": 0,
                     "human_seconds": 0,
-                    "payload": {"content": answer_raw},
+                    "content": answer_raw,
                 }
             ]
 
@@ -321,16 +324,23 @@ class LLMRouter:
         """По черзі виконує екшени, які повернула LLM, враховуючи затримку wait_seconds."""
 
         for action in actions:
-            action_type = action.get("type")
-            payload = action.get("payload") or {}
+            action_type_raw = action.get("type")
+            action_type = self._normalize_action_type(action_type_raw)
             wait_seconds = float(action.get("wait_seconds", 0) or 0)
             human_seconds = float(action.get("human_seconds", 0) or 0)
 
+            if not action_type:
+                print("ℹ️ Отримано дію без типу, пропускаю її.")
+                continue
+
+            payload = self._build_payload_for_action(
+                action_type=action_type, action_body=action
+            )
             handler = self._action_handlers.get(action_type)
 
             if not handler:
                 # Невідомий тип — просто пропускаємо, щоб не ламати сценарій.
-                print(f"ℹ️ Невідомий тип дії від LLM: {action_type}. Пропускаю.")
+                print(f"ℹ️ Невідомий тип дії від LLM: {action_type_raw}. Пропускаю.")
                 continue
 
             if wait_seconds > 0:
@@ -345,3 +355,38 @@ class LLMRouter:
                 payload=payload,
                 human_seconds=human_seconds,
             )
+
+    @staticmethod
+    def _normalize_action_type(action_type: Optional[str]) -> Optional[str]:
+        """Нормалізує назви дій, щоб підтримувати старий і новий формати від LLM."""
+
+        if not action_type:
+            return None
+        aliases = {
+            "react_to_message": "add_reaction",
+            "fake_typping": "fake_typing",
+        }
+        return aliases.get(action_type, action_type)
+
+    @staticmethod
+    def _build_payload_for_action(action_type: str, action_body: dict) -> dict:
+        """Готує payload для хендлера, враховуючи новий формат екшенів без вкладеного payload."""
+
+        if action_body.get("payload"):
+            # Старий формат вже має payload – повертаємо як є.
+            return action_body.get("payload") or {}
+
+        if action_type == "send_message":
+            return {"content": action_body.get("content")}
+
+        if action_type == "send_messages":
+            return {"messages": action_body.get("messages")}
+
+        if action_type == "add_reaction":
+            return {
+                "message_id": action_body.get("message_id"),
+                "emoji": action_body.get("reaction") or action_body.get("emoji"),
+            }
+
+        # Для wait, fake_typing, ignore нічого додатково не потрібно.
+        return {}
