@@ -209,7 +209,9 @@ class TelegramAPI:
                     f"на повідомлення з ID {message_id} у чаті {chat_id}"
                 ),
                 message_time_iso=message_time_iso,
-                message_id=message_id,
+                # Для реакцій зберігаємо message_id як None, щоб у історії
+                # явно показати, що це не окреме текстове повідомлення.
+                message_id=None,
             )
 
     def _ensure_user_info_file(

@@ -50,5 +50,7 @@ async def handle_add_reaction(
             f"на повідомлення з ID {target_message_id}"
         ),
         message_time_iso=datetime.now(timezone.utc).isoformat(),
-        message_id=target_message_id,
+        # Для реакцій не зберігаємо message_id, щоб у історії було очевидно,
+        # що це просто факт реакції, а не звичайне повідомлення.
+        message_id=None,
     )
