@@ -21,7 +21,10 @@ def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> Speec
     temp_files: list[str] = []
 
     # Створюємо безпечний ліміт для обрізки (не більше STT_MAX_SECONDS)
-    safe_duration = min(float(duration_seconds), float(STT_MAX_SECONDS))
+    # Телеграм інколи не передає duration для voice, тому підставляємо максимально
+    # дозволену тривалість, щоб не обрізати файл у «0 секунд» та не псувати аудіо.
+    declared_duration = float(duration_seconds) if duration_seconds else float(STT_MAX_SECONDS)
+    safe_duration = min(declared_duration, float(STT_MAX_SECONDS))
 
     try:
         # Готуємо аудіо: зберегти → за потреби обрізати → відправити як OGG/OPUS
