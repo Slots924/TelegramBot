@@ -16,6 +16,7 @@ from src.admin_console.commands import (
     SyncUnreadCommand,
     ShowHistoryCommand,
 )
+from src.admin_console.utils import sanitize_text
 
 
 def _parse_target(raw_target: str) -> Tuple[int | None, str | None]:
@@ -44,7 +45,7 @@ def parse_command(line: str) -> BaseCommand:
         raw_target = args[0]
         user_id, username = _parse_target(raw_target)
         text = " ".join(args[1:]).strip()
-        text_value = text if text else None
+        text_value = sanitize_text(text) if text else None
         return SendMessageCommand(
             name="send",
             raw_target=raw_target,
@@ -66,7 +67,7 @@ def parse_command(line: str) -> BaseCommand:
             raw_target=raw_target,
             user_id=user_id,
             username=username,
-            content=content,
+            content=sanitize_text(content),
         )
 
     if cmd == "list_dialogs":

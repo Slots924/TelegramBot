@@ -18,6 +18,7 @@ from src.admin_console.commands import (
     SyncUnreadCommand,
     ShowHistoryCommand,
 )
+from src.admin_console.utils import sanitize_text
 from src.history.history_manager import HistoryManager
 from src.router.llm_router import LLMRouter
 from src.telegram_api.telegram_api import TelegramAPI
@@ -68,7 +69,9 @@ async def handle_send_message(
 
     if cmd.text:
         # Режим прямої відправки повідомлення
-        message = await telegram.send_message(chat_id, cmd.text)
+        clean_text = sanitize_text(cmd.text)
+
+        message = await telegram.send_message(chat_id, clean_text)
         message_time_iso = (
             message.date.astimezone(timezone.utc).isoformat()
             if getattr(message, "date", None)
@@ -77,12 +80,12 @@ async def handle_send_message(
         history.append_message(
             user_id=target_user_id,
             role="assistant",
-            content=cmd.text,
+            content=clean_text,
             message_time_iso=message_time_iso,
             message_id=getattr(message, "id", None),
         )
         print(
-            f"✅ Надіслано повідомлення користувачу {target_user_id} | {resolved_username}: \"{cmd.text}\""
+            f"✅ Надіслано повідомлення користувачу {target_user_id} | {resolved_username}: \"{clean_text}\""
         )
         return
 
@@ -109,15 +112,17 @@ async def handle_append_system_prompt(
         telegram=telegram,
     )
 
+    sanitized_content = sanitize_text(cmd.content)
+
     history.append_message(
         user_id=target_user_id,
         role="system",
-        content=cmd.content,
+        content=sanitized_content,
         message_time_iso=datetime.now(timezone.utc).isoformat(),
         message_id=None,
     )
     print(
-        f"🧩 Додано системний промпт для {target_user_id} | {resolved_username}: {cmd.content}"
+        f"🧩 Додано системний промпт для {target_user_id} | {resolved_username}: {sanitized_content}"
     )
 
 
