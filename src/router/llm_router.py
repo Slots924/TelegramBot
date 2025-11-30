@@ -223,6 +223,38 @@ class LLMRouter:
         else:
             print(f"🟢 Цикл завершено для {user_id}.")
 
+    async def trigger_proactive_message(
+        self, user_id: int, chat_id: int, instruction: str = "Напиши повідомлення цьому користувачу"
+    ) -> None:
+        """Запускає LLM без нового вхідного тексту, щоб модель сама згенерувала дії."""
+
+        messages_for_llm = self._build_llm_messages(user_id=user_id)
+        proactive_instruction = (
+            "Система ініціює контакт із користувачем без нового повідомлення. "
+            "Згенеруй список дій у JSON-форматі (send_message, send_messages, fake_typing, add_reaction, ignore), "
+            "щоб написати релевантне повідомлення користувачу. "
+            f"{instruction}"
+        )
+        messages_for_llm.append({"role": "system", "content": proactive_instruction})
+
+        try:
+            answer_raw = await asyncio.to_thread(self.llm.generate, messages_for_llm)
+        except Exception as exc:
+            print(f"❌ Помилка при виклику LLM (proactive) для {user_id}: {exc}")
+            answer_raw = "[]"
+
+        print("\n================= RAW LLM RESPONSE (proactive) =================")
+        try:
+            parsed = json.loads(answer_raw)
+            pretty = json.dumps(parsed, ensure_ascii=False, indent=2)
+            print(pretty)
+        except Exception:
+            print(answer_raw)
+        print("==============================================================\n")
+
+        actions = self._parse_actions(answer_raw)
+        await self._execute_actions(chat_id=chat_id, user_id=user_id, actions=actions)
+
     def _build_llm_messages(self, user_id: int) -> List[dict]:
         """Формує список повідомлень для LLM з урахуванням системних промптів та історії."""
 
