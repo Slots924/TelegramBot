@@ -5,10 +5,10 @@ from google.protobuf.json_format import MessageToJson
 # === НАЛАШТУВАННЯ ===
 
 # Шлях до JSON з гуглівським Service Account ключем
-GOOGLE_CREDENTIALS_PATH = r"C:\Users\Darkness\Documents\Projects\TelegramBot\speach_to_text_credential.json"
+GOOGLE_CREDENTIALS_PATH = r"C:\Users\Darkness\Documents\Projects\TelegramBot\credentials\speech_to_text_credential.json"
 
 # Файл з Telegram .ogg (Opus)
-audio_file_path = r"C:\Users\Darkness\Documents\Projects\TelegramBot\audio.mp3"
+audio_file_path = r"C:\Users\Darkness\Documents\Projects\TelegramBot\audio_2025-11-30_21-56-59.ogg"
 
 # Мови (імітація автодетекту)
 PRIMARY_LANGUAGE = "uk-UA"

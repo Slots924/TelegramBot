@@ -27,4 +27,4 @@ env/
 data/dialogs/
 
 # Google STT credentials
-speach_to_text_credential.json
+credentials/speech_to_text_credential.json
