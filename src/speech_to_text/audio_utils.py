@@ -6,7 +6,7 @@ import subprocess
 import uuid
 from typing import Iterable
 
-from .config import STT_MAX_SECONDS, STT_TMP_DIR
+from .config import FFMPEG_PATH, STT_MAX_SECONDS, STT_TMP_DIR
 
 
 def _run_ffmpeg(arguments: list[str]) -> None:
@@ -16,11 +16,34 @@ def _run_ffmpeg(arguments: list[str]) -> None:
     :param arguments: повний список аргументів для виклику ffmpeg.
     """
 
-    # Лог з повною командою, яку збираємося виконати.
-    print(f"🎛️ Запуск ffmpeg з аргументами: {' '.join(arguments)}")
+    # Обираємо шлях до ffmpeg: спочатку беремо явно вказаний, інакше шукаємо у PATH
+    ffmpeg_path: str | None = None
+
+    if FFMPEG_PATH:
+        # Якщо шлях задано у налаштуваннях, перевіряємо, що файл існує та виконуваний
+        if os.path.isfile(FFMPEG_PATH) and os.access(FFMPEG_PATH, os.X_OK):
+            ffmpeg_path = FFMPEG_PATH
+        else:
+            raise RuntimeError(
+                "❌ Вказаний FFMPEG_PATH не знайдено або він не є виконуваним. "
+                "Будь ласка, перевірте шлях або видаліть налаштування, щоб використовувати системний ffmpeg."
+            )
+    else:
+        ffmpeg_path = shutil.which("ffmpeg")
+
+    if not ffmpeg_path:
+        raise RuntimeError(
+            "❌ ffmpeg не знайдено. Встановіть ffmpeg або вкажіть FFMPEG_PATH у settings.py/змінних оточення."
+        )
+
+    # Лог з повною командою та шляхом до бінарника, який збираємося виконати
+    print(
+        "🎛️ Запуск ffmpeg: "
+        f"бінарник '{ffmpeg_path}', аргументи: {' '.join(arguments)}"
+    )
 
     process = subprocess.run(
-        ["ffmpeg", *arguments],
+        [ffmpeg_path, *arguments],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
