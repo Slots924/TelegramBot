@@ -74,3 +74,28 @@ LLM_TOP_P = 0.92
 
 LLM_PRESENCE_PENALTY = 0.92
 LLM_FREQUENCY_PENALTY = 0.6
+
+
+# ──────────────────────────────────────────────────────────────
+# РОЗПІЗНАВАННЯ МОВЛЕННЯ (STT)
+# ──────────────────────────────────────────────────────────────
+
+# Чи ввімкнено розпізнавання мовлення загалом
+STT_ENABLED: bool = False
+
+# Шлях до JSON з ключами сервісного акаунта Google
+GOOGLE_CREDENTIALS_PATH: str = os.path.join(
+    "credentials", "speech_to_text_credential.json"
+)
+
+# Максимальна тривалість обробки одного аудіо у секундах
+STT_MAX_SECONDS: int = 50
+
+# Основна мова для розпізнавання
+STT_PRIMARY_LANGUAGE: str = "uk-UA"
+
+# Альтернативні мови (список у порядку пріоритету)
+STT_ALT_LANGUAGES: list[str] = ["ru-RU", "en-US"]
+
+# Тимчасова директорія для проміжних аудіофайлів
+STT_TMP_DIR: str = os.path.join("data", "audio_tmp")
