@@ -19,6 +19,7 @@ from settings import (
 from src.history.history_manager import HistoryManager
 from src.llm_api.llm_api import LLMAPI
 from src.llm_api.utils.loader import load_optional_prompt
+from src.speech_to_text import SpeechResult, transcribe_voice
 from src.router.actions import (
     handle_add_reaction,
     handle_fake_typing,
@@ -163,14 +164,90 @@ class LLMRouter:
         message_id: int | None,
         msg_type: str,
     ) -> None:
-        """Обробляє voice-повідомлення і додає його у буфер."""
+        """Завантажує voice, пробує його розпізнати та кладе у буфер історії.
+
+        Параметри
+        ----------
+        user_id: int
+            Ідентифікатор користувача, для якого ведемо історію.
+        chat_id: int
+            Чат, з якого прийшло голосове повідомлення (потрібен для завантаження файла).
+        content: str
+            Початковий опис voice з TelegramAPI (потрібен лише для сумісності сигнатури).
+        media_meta: dict | None
+            Метадані voice (тривалість, file_id тощо), доповнюються інформацією про транскрипцію.
+        message_time: datetime
+            Час надходження повідомлення для збереження у історії.
+        message_id: int | None
+            ID повідомлення в Telegram (використовуємо, щоб завантажити файл).
+        msg_type: str
+            Тип повідомлення ("voice").
+        """
+
+        duration_seconds = (media_meta or {}).get("duration")
+        duration_label = duration_seconds if duration_seconds is not None else "unknown"
+
+        # Базовий текст на випадок помилок або відсутності транскрипції.
+        prepared_text = (
+            f"[VOICE_MESSAGE duration={duration_label}s transcribed=NO]\n"
+            "Користувач надіслав голосове повідомлення, але розпізнати текст не вдалося."
+        )
+
+        # Копія метаданих, щоб додати інформацію про транскрипцію/помилки.
+        safe_media_meta = dict(media_meta or {})
+
+        try:
+            voice_bytes = await self.telegram.download_voice_bytes(
+                chat_id=chat_id,
+                message_id=message_id,
+                file_id=safe_media_meta.get("file_id"),
+            )
+        except Exception as exc:
+            print(
+                f"⚠️ Неочікувана помилка під час завантаження voice message_id={message_id}: {exc}"
+            )
+            voice_bytes = None
+
+        if voice_bytes:
+            try:
+                # Виконуємо розпізнавання у окремому потоці, щоб не блокувати event-loop.
+                speech_result: SpeechResult = await asyncio.to_thread(
+                    transcribe_voice, voice_bytes, duration_seconds or 0
+                )
+
+                if speech_result and speech_result.text:
+                    cleaned_text = speech_result.text.strip()
+                    prepared_text = (
+                        f"[VOICE_MESSAGE duration={duration_label}s transcribed=YES]\n"
+                        f"Транскрипція:\n\"{cleaned_text}\""
+                    )
+                    safe_media_meta.update(
+                        {
+                            "transcription": cleaned_text,
+                            "transcription_language": speech_result.language,
+                            "transcription_confidence": speech_result.confidence,
+                        }
+                    )
+                else:
+                    safe_media_meta["transcription_error"] = "empty_text"
+            except Exception as exc:
+                # Логуємо, але залишаємо fallback-текст.
+                print(
+                    f"⚠️ Помилка розпізнавання voice message_id={message_id} у чаті {chat_id}: {exc}"
+                )
+                safe_media_meta["transcription_error"] = str(exc)
+        else:
+            safe_media_meta["download_error"] = "voice_download_failed"
+            print(
+                f"⚠️ Не вдалося завантажити голосове повідомлення message_id={message_id} у чаті {chat_id}."
+            )
 
         self._register_inbox_message(
             user_id=user_id,
             chat_id=chat_id,
-            content=content,
+            content=prepared_text,
             msg_type=msg_type,
-            media_meta=media_meta,
+            media_meta=safe_media_meta,
             message_time=message_time,
             message_id=message_id,
         )
