@@ -43,9 +43,11 @@ class UserState:
 
 @dataclass
 class ReceivedMessage:
-    """Описує вхідне повідомлення у внутрішній черзі (текст, час, message_id)."""
+    """Описує вхідне повідомлення у внутрішній черзі з типом та метаданими."""
 
-    text: str
+    content: str
+    msg_type: str
+    media_meta: dict | None
     message_time_iso: str | None
     message_id: int | None
 
@@ -94,27 +96,226 @@ class LLMRouter:
         self,
         user_id: int,
         chat_id: int,
-        text: str,
+        content: str,
+        msg_type: str,
+        media_meta: dict | None,
         message_time: datetime,
         message_id: int | None = None,
     ) -> None:
         """Реєструє нове повідомлення та за потреби запускає debounce.
 
-        message_id передаємо, щоб зберегти у історії точний зв'язок із Telegram.
+        content вже містить стислий опис медіа (для не тексту), msg_type визначає
+        тип повідомлення, а message_id передаємо, щоб зберегти у історії точний
+        зв'язок із Telegram.
         """
+
+        handlers_map = {
+            "text": self._handle_text_message,
+            "voice": self._handle_voice_message,
+            "audio": self._handle_audio_message,
+            "video_note": self._handle_video_note_message,
+            "video": self._handle_video_message,
+            "document": self._handle_document_message,
+            "photo": self._handle_photo_message,
+        }
+
+        handler = handlers_map.get(msg_type, self._handle_text_message)
+        await handler(
+            user_id=user_id,
+            chat_id=chat_id,
+            content=content,
+            media_meta=media_meta,
+            message_time=message_time,
+            message_id=message_id,
+            msg_type=msg_type,
+        )
+        self._maybe_start_processing(user_id=user_id, chat_id=chat_id)
+
+    async def _handle_text_message(
+        self,
+        user_id: int,
+        chat_id: int,
+        content: str,
+        media_meta: dict | None,
+        message_time: datetime,
+        message_id: int | None,
+        msg_type: str,
+    ) -> None:
+        """Обробляє текстове повідомлення і додає його у внутрішній буфер."""
+
+        self._register_inbox_message(
+            user_id=user_id,
+            chat_id=chat_id,
+            content=content,
+            msg_type=msg_type,
+            media_meta=media_meta,
+            message_time=message_time,
+            message_id=message_id,
+        )
+
+    async def _handle_voice_message(
+        self,
+        user_id: int,
+        chat_id: int,
+        content: str,
+        media_meta: dict | None,
+        message_time: datetime,
+        message_id: int | None,
+        msg_type: str,
+    ) -> None:
+        """Обробляє voice-повідомлення і додає його у буфер."""
+
+        self._register_inbox_message(
+            user_id=user_id,
+            chat_id=chat_id,
+            content=content,
+            msg_type=msg_type,
+            media_meta=media_meta,
+            message_time=message_time,
+            message_id=message_id,
+        )
+
+    async def _handle_audio_message(
+        self,
+        user_id: int,
+        chat_id: int,
+        content: str,
+        media_meta: dict | None,
+        message_time: datetime,
+        message_id: int | None,
+        msg_type: str,
+    ) -> None:
+        """Обробляє музичні файли/аудіотреки."""
+
+        self._register_inbox_message(
+            user_id=user_id,
+            chat_id=chat_id,
+            content=content,
+            msg_type=msg_type,
+            media_meta=media_meta,
+            message_time=message_time,
+            message_id=message_id,
+        )
+
+    async def _handle_video_note_message(
+        self,
+        user_id: int,
+        chat_id: int,
+        content: str,
+        media_meta: dict | None,
+        message_time: datetime,
+        message_id: int | None,
+        msg_type: str,
+    ) -> None:
+        """Обробляє круглі відео (video_note)."""
+
+        self._register_inbox_message(
+            user_id=user_id,
+            chat_id=chat_id,
+            content=content,
+            msg_type=msg_type,
+            media_meta=media_meta,
+            message_time=message_time,
+            message_id=message_id,
+        )
+
+    async def _handle_video_message(
+        self,
+        user_id: int,
+        chat_id: int,
+        content: str,
+        media_meta: dict | None,
+        message_time: datetime,
+        message_id: int | None,
+        msg_type: str,
+    ) -> None:
+        """Обробляє відеофайли, що прийшли від користувача."""
+
+        self._register_inbox_message(
+            user_id=user_id,
+            chat_id=chat_id,
+            content=content,
+            msg_type=msg_type,
+            media_meta=media_meta,
+            message_time=message_time,
+            message_id=message_id,
+        )
+
+    async def _handle_document_message(
+        self,
+        user_id: int,
+        chat_id: int,
+        content: str,
+        media_meta: dict | None,
+        message_time: datetime,
+        message_id: int | None,
+        msg_type: str,
+    ) -> None:
+        """Обробляє документи (PDF, DOC тощо)."""
+
+        self._register_inbox_message(
+            user_id=user_id,
+            chat_id=chat_id,
+            content=content,
+            msg_type=msg_type,
+            media_meta=media_meta,
+            message_time=message_time,
+            message_id=message_id,
+        )
+
+    async def _handle_photo_message(
+        self,
+        user_id: int,
+        chat_id: int,
+        content: str,
+        media_meta: dict | None,
+        message_time: datetime,
+        message_id: int | None,
+        msg_type: str,
+    ) -> None:
+        """Обробляє фотографії."""
+
+        self._register_inbox_message(
+            user_id=user_id,
+            chat_id=chat_id,
+            content=content,
+            msg_type=msg_type,
+            media_meta=media_meta,
+            message_time=message_time,
+            message_id=message_id,
+        )
+
+    def _register_inbox_message(
+        self,
+        user_id: int,
+        chat_id: int,
+        content: str,
+        msg_type: str,
+        media_meta: dict | None,
+        message_time: datetime,
+        message_id: int | None,
+    ) -> None:
+        """Зберігає вхідне повідомлення у черзі та оновлює стан."""
 
         state = self._get_state(user_id)
         message_time_iso = message_time.astimezone(timezone.utc).isoformat()
         state.inbox.append(
             ReceivedMessage(
-                text=text,
+                content=content,
+                msg_type=msg_type,
+                media_meta=media_meta or {},
                 message_time_iso=message_time_iso,
                 message_id=message_id,
             )
         )
         state.last_activity = datetime.now(timezone.utc)
         state.last_chat_id = chat_id
-        print(f"🧠 Додано повідомлення від {user_id}: {text}")
+        print(f"🧠 Додано повідомлення від {user_id} ({msg_type}): {content}")
+
+    def _maybe_start_processing(self, user_id: int, chat_id: int) -> None:
+        """Приймає рішення, чи потрібно запускати debounce/цикл обробки."""
+
+        state = self._get_state(user_id)
 
         if state.busy:
             print(f"⏳ Користувач {user_id} вже обробляється. Чекаємо завершення поточного циклу.")
@@ -181,7 +382,7 @@ class LLMRouter:
                 self.history.append_message(
                     user_id=user_id,
                     role="user",
-                    content=message.text,
+                    content=message.content,
                     message_time_iso=message.message_time_iso,
                     message_id=message.message_id,
                 )
