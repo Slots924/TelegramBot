@@ -56,6 +56,79 @@ class TelegramAPI:
         print(f"📨 Відправлено повідомлення в чат {chat_id}: {text}")
         return message
 
+    async def download_voice_bytes(
+        self, chat_id: int | str, message_id: int | None, file_id: int | None = None
+    ) -> bytes | None:
+        """Завантажує voice-повідомлення у байтах через Telethon.
+
+        Параметри
+        ----------
+        chat_id: int | str
+            Ідентифікатор чату, з якого потрібно забрати голосове повідомлення.
+        message_id: int | None
+            ID конкретного повідомлення з voice. Без нього завантаження неможливе.
+        file_id: int | None
+            ID файлу з метаданих (для логування та дебагу, не обов'язковий).
+        
+        Повертає
+        --------
+        bytes | None
+            Байти voice-файлу або None у разі помилки/відсутності файлу.
+        """
+
+        if message_id is None:
+            print(
+                f"⚠️ Не вдалося завантажити voice: відсутній message_id (file_id={file_id})."
+            )
+            return None
+
+        try:
+            # Отримуємо саме те повідомлення, яке містить голосове медіа.
+            message = await self.client.get_messages(chat_id, ids=message_id)
+        except Exception as exc:
+            print(
+                f"⚠️ Не вдалося отримати повідомлення {message_id} для завантаження voice: {exc}"
+            )
+            return None
+
+        # Якщо Telethon повернув список, витягаємо перший елемент.
+        if isinstance(message, list):
+            message = message[0] if message else None
+
+        if message is None:
+            print(
+                f"⚠️ Не знайдено повідомлення (message_id={message_id}, file_id={file_id}) для voice."
+            )
+            return None
+
+        try:
+            # Використовуємо file=bytes, щоб одразу отримати байтовий вміст без збереження на диск.
+            raw_bytes = await self.client.download_media(message, file=bytes)
+
+            # Telethon може повернути шлях до файлу, тому підстрахуємося і дочитаємо байти вручну.
+            if isinstance(raw_bytes, str):
+                try:
+                    with open(raw_bytes, "rb") as file:
+                        raw_bytes = file.read()
+                except Exception as exc:
+                    print(
+                        f"⚠️ Файл voice збережено у {raw_bytes}, але не вдалося прочитати: {exc}"
+                    )
+                    return None
+
+            if not raw_bytes:
+                print(
+                    f"⚠️ Порожній результат при завантаженні voice (message_id={message_id}, file_id={file_id})."
+                )
+                return None
+
+            return raw_bytes
+        except Exception as exc:
+            print(
+                f"⚠️ Помилка завантаження voice (message_id={message_id}, file_id={file_id}): {exc}"
+            )
+            return None
+
     async def fetch_unread_messages(self, chat_id: int | str) -> list[dict]:
         """Повертає всі непрочитані вхідні повідомлення у вигляді простих словників.
 
