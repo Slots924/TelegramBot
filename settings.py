@@ -81,7 +81,7 @@ LLM_FREQUENCY_PENALTY = 0.6
 # ──────────────────────────────────────────────────────────────
 
 # Чи ввімкнено розпізнавання мовлення загалом
-STT_ENABLED: bool = False
+STT_ENABLED: bool = True
 
 # Шлях до JSON з ключами сервісного акаунта Google
 GOOGLE_CREDENTIALS_PATH: str = os.path.join(
