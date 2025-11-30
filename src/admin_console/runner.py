@@ -13,6 +13,7 @@ from src.admin_console.commands import (
     ListDialogsCommand,
     PruneHistoryCommand,
     SendMessageCommand,
+    SyncUnreadCommand,
     ShowHistoryCommand,
 )
 from src.admin_console.handlers import (
@@ -21,6 +22,7 @@ from src.admin_console.handlers import (
     handle_list_dialogs,
     handle_prune_history,
     handle_send_message,
+    handle_sync_unread,
     handle_show_history,
 )
 from src.history.history_manager import HistoryManager
@@ -46,6 +48,7 @@ def _print_help() -> None:
   show_history <target> [limit]       — показати останні N повідомлень (дефолт 10)
   prune_history <target> [keep]       — залишити лише N останніх чанків (дефолт 5)
   delete_dialog <target>              — повністю видалити діалог
+  sync_unread <target> [trigger]      — підтягнути непрочитані та позначити їх прочитаними (з trigger запустить LLM)
   help                                — показати цю підказку
   exit                                — завершити роботу консолі
 """
@@ -93,6 +96,13 @@ async def run_admin_console(
                 await handle_prune_history(command, telegram=telegram)
             elif isinstance(command, DeleteDialogCommand):
                 await handle_delete_dialog(command, telegram=telegram)
+            elif isinstance(command, SyncUnreadCommand):
+                await handle_sync_unread(
+                    command,
+                    telegram=telegram,
+                    history=history,
+                    router=router,
+                )
             else:
                 print("⚠️ Невідома команда після парсингу.")
         except Exception as exc:

@@ -255,6 +255,64 @@ class LLMRouter:
         actions = self._parse_actions(answer_raw)
         await self._execute_actions(chat_id=chat_id, user_id=user_id, actions=actions)
 
+    async def sync_unread_for_user(
+        self, user_id: int, chat_id: int, trigger_llm: bool = False
+    ) -> None:
+        """Синхронізує непрочитані повідомлення користувача та за потреби запускає LLM."""
+
+        unread_messages = await self.telegram.fetch_unread_messages(chat_id)
+        if not unread_messages:
+            print(
+                f"ℹ️ Непрочитаних повідомлень не знайдено для користувача {user_id} у чаті {chat_id}."
+            )
+            return
+
+        for message in unread_messages:
+            content = message.get("text") or ""
+            message_id = message.get("id")
+            message_date = message.get("date")
+            message_time_iso = (
+                message_date.astimezone(timezone.utc).isoformat()
+                if isinstance(message_date, datetime)
+                else datetime.now(timezone.utc).isoformat()
+            )
+            self.history.append_message(
+                user_id=user_id,
+                role="user",
+                content=content,
+                message_time_iso=message_time_iso,
+                message_id=message_id,
+            )
+
+        max_message_id = max((msg.get("id") or 0 for msg in unread_messages), default=0)
+        if max_message_id:
+            await self.telegram.mark_messages_read(chat_id, max_message_id)
+        print(
+            f"📥 Додано {len(unread_messages)} непрочитаних повідомлень у історію для користувача {user_id}."
+        )
+
+        if not trigger_llm:
+            return
+
+        messages_for_llm = self._build_llm_messages(user_id=user_id)
+        try:
+            answer_raw = await asyncio.to_thread(self.llm.generate, messages_for_llm)
+        except Exception as exc:
+            print(f"❌ Помилка при виклику LLM (sync_unread) для {user_id}: {exc}")
+            answer_raw = "[]"
+
+        print("\n================= RAW LLM RESPONSE (sync_unread) =================")
+        try:
+            parsed = json.loads(answer_raw)
+            pretty = json.dumps(parsed, ensure_ascii=False, indent=2)
+            print(pretty)
+        except Exception:
+            print(answer_raw)
+        print("================================================================\n")
+
+        actions = self._parse_actions(answer_raw)
+        await self._execute_actions(chat_id=chat_id, user_id=user_id, actions=actions)
+
     def _build_llm_messages(self, user_id: int) -> List[dict]:
         """Формує список повідомлень для LLM з урахуванням системних промптів та історії."""
 

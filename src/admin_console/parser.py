@@ -13,6 +13,7 @@ from src.admin_console.commands import (
     ListDialogsCommand,
     PruneHistoryCommand,
     SendMessageCommand,
+    SyncUnreadCommand,
     ShowHistoryCommand,
 )
 
@@ -119,6 +120,20 @@ def parse_command(line: str) -> BaseCommand:
             raw_target=raw_target,
             user_id=user_id,
             username=username,
+        )
+
+    if cmd == "sync_unread":
+        if not args:
+            raise ValueError("Синтаксис: sync_unread <user_id|@username> [trigger]")
+        raw_target = args[0]
+        user_id, username = _parse_target(raw_target)
+        trigger_llm = len(args) >= 2 and args[1].lower() == "trigger"
+        return SyncUnreadCommand(
+            name="sync_unread",
+            raw_target=raw_target,
+            user_id=user_id,
+            username=username,
+            trigger_llm=trigger_llm,
         )
 
     if cmd == "help":
