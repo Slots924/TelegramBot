@@ -7,8 +7,8 @@ python-dotenv>=1.0.1
 # HTTP-запити до LLM (Grok 4 Fast) та інших API
 requests>=2.31.0
 
-# Робота з аудіо (конвертація/обрізка)
-pydub>=0.25.1
+# Робота з аудіо (опора на системний ffmpeg)
+# ffmpeg має бути встановлений у системі, бібліотек не додаємо
 
 # Google Speech-to-Text клієнт
 google-cloud-speech>=2.26.0

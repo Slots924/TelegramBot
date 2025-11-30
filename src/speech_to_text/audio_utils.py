@@ -1,18 +1,39 @@
-"""Утиліти для обрізки та конвертації аудіо у формат, який приймає Google."""
+"""Утиліти для обрізки та конвертації аудіо у формат WAV 16 kHz mono."""
 
 import os
 import shutil
+import subprocess
 import uuid
 from typing import Iterable
-
-from pydub import AudioSegment
 
 from .config import STT_MAX_SECONDS, STT_TMP_DIR
 
 
+def _run_ffmpeg(arguments: list[str]) -> None:
+    """
+    Виконує команду ffmpeg та піднімає зрозумілу помилку у випадку невдачі.
+
+    :param arguments: повний список аргументів для виклику ffmpeg.
+    """
+
+    process = subprocess.run(
+        ["ffmpeg", *arguments],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    if process.returncode != 0:
+        error_message = (
+            "Не вдалося виконати ffmpeg. "
+            f"Код: {process.returncode}. STDOUT: {process.stdout}. STDERR: {process.stderr}"
+        )
+        raise RuntimeError(error_message)
+
+
 def save_temp_copy(audio_input: bytes | str) -> str:
     """
-    Зберігає аудіо (байти або файл) у тимчасову директорію.
+    Зберігає аудіо (байти або файл) у тимчасову директорію для подальшої обробки.
 
     :param audio_input: сирі байти або шлях до файлу з аудіо.
     :return: шлях до тимчасового файлу у STT_TMP_DIR.
@@ -32,46 +53,56 @@ def save_temp_copy(audio_input: bytes | str) -> str:
     return temp_path
 
 
-def load_audio_segment(file_path: str) -> AudioSegment:
+def trim_audio(file_path: str, duration_seconds: float) -> str:
     """
-    Завантажує аудіо у AudioSegment для подальшої обробки.
+    Обрізає аудіо до максимально допустимої довжини.
 
-    :param file_path: шлях до файлу, який треба прочитати.
-    :return: AudioSegment з даними аудіо.
-    """
-
-    return AudioSegment.from_file(file_path)
-
-
-def trim_audio(segment: AudioSegment, duration_seconds: float) -> AudioSegment:
-    """
-    Обрізає аудіо до потрібної довжини за секундами.
-
-    :param segment: AudioSegment з оригінальним аудіо.
+    :param file_path: шлях до вихідного аудіо.
     :param duration_seconds: фактична тривалість вхідного аудіо.
-    :return: AudioSegment, обрізаний до STT_MAX_SECONDS.
+    :return: шлях до обрізаного файлу у тимчасовій директорії.
     """
 
-    max_seconds = min(duration_seconds, STT_MAX_SECONDS)
-    max_ms = int(max_seconds * 1000)
-    return segment[:max_ms]
+    safe_duration = min(duration_seconds, STT_MAX_SECONDS)
+    trimmed_path = os.path.join(STT_TMP_DIR, f"trimmed_{uuid.uuid4().hex}.ogg")
+
+    # -t задає тривалість вихідного файлу у секундах
+    _run_ffmpeg([
+        "-y",  # перезаписати, якщо файл існує
+        "-i",
+        file_path,
+        "-t",
+        str(safe_duration),
+        "-c",
+        "copy",
+        trimmed_path,
+    ])
+
+    return trimmed_path
 
 
-def convert_to_ogg_opus(segment: AudioSegment) -> tuple[bytes, str]:
+def convert_to_wav(file_path: str) -> tuple[bytes, str]:
     """
-    Конвертує аудіо у формат OGG_OPUS 48000Hz.
+    Конвертує аудіо у формат WAV 16 kHz mono, який очікує Google STT.
 
-    :param segment: AudioSegment після обрізки.
+    :param file_path: шлях до файлу після обрізки.
     :return: кортеж з байтами готового файлу та шляхом до тимчасового файлу.
     """
 
-    prepared_segment = segment.set_frame_rate(48000).set_channels(1)
+    output_path = os.path.join(STT_TMP_DIR, f"prepared_{uuid.uuid4().hex}.wav")
 
-    output_path = os.path.join(STT_TMP_DIR, f"prepared_{uuid.uuid4().hex}.ogg")
-    # Експортуємо у файл, щоб можна було підчистити після використання
-    prepared_segment.export(output_path, format="ogg", codec="opus")
+    _run_ffmpeg([
+        "-y",
+        "-i",
+        file_path,
+        "-ac",
+        "1",  # моно
+        "-ar",
+        "16000",  # частота дискретизації 16 kHz
+        "-sample_fmt",
+        "s16",
+        output_path,
+    ])
 
-    # Читаємо у пам'ять, щоб віддати у Google API
     with open(output_path, "rb") as file:
         audio_bytes = file.read()
 
@@ -94,7 +125,7 @@ def cleanup_temp_files(paths: Iterable[str]) -> None:
 
 def prepare_audio_bytes(audio_input: bytes | str, duration_seconds: float) -> tuple[bytes, list[str]]:
     """
-    Повний цикл підготовки аудіо: зберегти, обрізати, сконвертувати.
+    Повний цикл підготовки аудіо: зберегти, обрізати, сконвертувати у WAV.
 
     :param audio_input: байти або шлях до файлу з вхідним аудіо.
     :param duration_seconds: тривалість оригінального аудіо, щоб обрізати до ліміту.
@@ -107,15 +138,12 @@ def prepare_audio_bytes(audio_input: bytes | str, duration_seconds: float) -> tu
     temp_raw_path = save_temp_copy(audio_input)
     temp_files.append(temp_raw_path)
 
-    # 2. Завантажуємо у AudioSegment для обрізки
-    segment = load_audio_segment(temp_raw_path)
+    # 2. Обрізаємо до ліміту через ffmpeg
+    trimmed_path = trim_audio(temp_raw_path, duration_seconds)
+    temp_files.append(trimmed_path)
 
-    # 3. Обрізаємо до ліміту
-    trimmed_segment = trim_audio(segment, duration_seconds)
-
-    # 4. Конвертуємо у потрібний формат
-    audio_bytes, prepared_path = convert_to_ogg_opus(trimmed_segment)
+    # 3. Конвертуємо у WAV 16kHz mono
+    audio_bytes, prepared_path = convert_to_wav(trimmed_path)
     temp_files.append(prepared_path)
 
     return audio_bytes, temp_files
-
