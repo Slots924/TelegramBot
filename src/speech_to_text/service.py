@@ -24,7 +24,7 @@ def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> Speec
     safe_duration = min(float(duration_seconds), float(STT_MAX_SECONDS))
 
     try:
-        # Готуємо аудіо: зберегти → обрізати → конвертувати у потрібний формат
+        # Готуємо аудіо: зберегти → за потреби обрізати → відправити як OGG/OPUS
         prepared_bytes, temp_files = audio_utils.prepare_audio_bytes(
             audio_input=audio_bytes,
             duration_seconds=safe_duration,
