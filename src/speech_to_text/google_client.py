@@ -1,5 +1,8 @@
 """Обгортка над Google Cloud Speech-to-Text."""
 
+import os
+import time
+import traceback
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -53,7 +56,23 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
     print(f"Основна мова: {_recognition_config.language_code}")
     print(f"Альтернативні: {_recognition_config.alternative_language_codes}\n")
 
+    credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    print(f"Credentials path: {credentials_path}")
+
+    start_time = time.perf_counter()
     response = _speech_client.recognize(config=_recognition_config, audio=audio)
+    elapsed = time.perf_counter() - start_time
+    results_count = len(getattr(response, "results", [])) if response else 0
+    alternatives_count = (
+        len(response.results[0].alternatives)
+        if response and getattr(response, "results", None)
+        else 0
+    )
+
+    print(
+        f"⏱️ Google STT виклик завершено за {elapsed:.2f}s: results={results_count}, "
+        f"alternatives_first={alternatives_count}"
+    )
 
     # Відображаємо сирий JSON у консоль, щоб легше діагностувати помилки
     try:
@@ -63,6 +82,7 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
         print("=== END RAW STT RESPONSE ===\n")
     except Exception as exc:
         print(f"⚠️ Не вдалося розпарсити відповідь STT у JSON: {exc}")
+        print(traceback.format_exc())
 
     if not response.results:
         return SpeechResult(text=None, language=None, confidence=None, raw_response=response)

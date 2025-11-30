@@ -7,6 +7,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import traceback
 from typing import Awaitable, Callable, Dict, List, Optional, Sequence
 
 from settings import (
@@ -20,6 +21,7 @@ from src.history.history_manager import HistoryManager
 from src.llm_api.llm_api import LLMAPI
 from src.llm_api.utils.loader import load_optional_prompt
 from src.speech_to_text import SpeechResult, transcribe_voice
+from src.speech_to_text.config import STT_ENABLED, STT_MAX_SECONDS
 from src.router.actions import (
     handle_add_reaction,
     handle_fake_typing,
@@ -186,6 +188,11 @@ class LLMRouter:
 
         duration_seconds = (media_meta or {}).get("duration")
         duration_label = duration_seconds if duration_seconds is not None else "unknown"
+        safe_duration = (
+            min(float(duration_seconds), float(STT_MAX_SECONDS))
+            if duration_seconds
+            else float(STT_MAX_SECONDS)
+        )
 
         # Базовий текст на випадок помилок або відсутності транскрипції.
         prepared_text = (
@@ -195,6 +202,17 @@ class LLMRouter:
 
         # Копія метаданих, щоб додати інформацію про транскрипцію/помилки.
         safe_media_meta = dict(media_meta or {})
+
+        print(
+            "🎙️ Обробка voice: user_id={uid}, chat_id={cid}, message_id={mid}, "
+            "duration={dur}, file_id={fid}".format(
+                uid=user_id,
+                cid=chat_id,
+                mid=message_id,
+                dur=duration_label,
+                fid=safe_media_meta.get("file_id"),
+            )
+        )
 
         try:
             voice_bytes = await self.telegram.download_voice_bytes(
@@ -206,13 +224,20 @@ class LLMRouter:
             print(
                 f"⚠️ Неочікувана помилка під час завантаження voice message_id={message_id}: {exc}"
             )
+            print(traceback.format_exc())
             voice_bytes = None
 
         if voice_bytes:
+            print(
+                f"📊 Завантажені байти voice: {len(voice_bytes)} bytes (message_id={message_id})"
+            )
             try:
                 # Виконуємо розпізнавання у окремому потоці, щоб не блокувати event-loop.
+                print(
+                    f"🧠 Старт STT: safe_duration={safe_duration}, STT_ENABLED={STT_ENABLED}"
+                )
                 speech_result: SpeechResult = await asyncio.to_thread(
-                    transcribe_voice, voice_bytes, duration_seconds or 0
+                    transcribe_voice, voice_bytes, safe_duration
                 )
 
                 if speech_result and speech_result.text:
@@ -235,6 +260,7 @@ class LLMRouter:
                 print(
                     f"⚠️ Помилка розпізнавання voice message_id={message_id} у чаті {chat_id}: {exc}"
                 )
+                print(traceback.format_exc())
                 safe_media_meta["transcription_error"] = str(exc)
         else:
             safe_media_meta["download_error"] = "voice_download_failed"

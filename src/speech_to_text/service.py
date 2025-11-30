@@ -1,7 +1,15 @@
 """Публічний сервіс для розпізнавання голосу без залежності від Telegram."""
 
+import os
+import time
+
 from . import audio_utils
-from .config import STT_ENABLED, STT_MAX_SECONDS
+from .config import (
+    STT_ALT_LANGUAGES,
+    STT_ENABLED,
+    STT_MAX_SECONDS,
+    STT_PRIMARY_LANGUAGE,
+)
 from .google_client import SpeechResult, transcribe_bytes
 
 
@@ -26,6 +34,8 @@ def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> Speec
     declared_duration = float(duration_seconds) if duration_seconds else float(STT_MAX_SECONDS)
     safe_duration = min(declared_duration, float(STT_MAX_SECONDS))
 
+    credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+
     try:
         # Готуємо аудіо: зберегти → за потреби обрізати → відправити як OGG/OPUS
         prepared_bytes, temp_files = audio_utils.prepare_audio_bytes(
@@ -33,8 +43,33 @@ def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> Speec
             duration_seconds=safe_duration,
         )
 
+        print(
+            "🎯 STT виклик підготовлено: bytes_len={blen}, safe_duration={sdur}, "
+            "primary_lang={primary}, alt_langs={alt}, creds={creds}".format(
+                blen=len(prepared_bytes),
+                sdur=safe_duration,
+                primary=STT_PRIMARY_LANGUAGE,
+                alt=STT_ALT_LANGUAGES,
+                creds=credentials_path,
+            )
+        )
+
         # Відправляємо у Google STT
+        start_time = time.perf_counter()
         result = transcribe_bytes(prepared_bytes)
+        elapsed = time.perf_counter() - start_time
+
+        raw_response = getattr(result, "raw_response", None)
+        results_count = len(getattr(raw_response, "results", [])) if raw_response else 0
+        first_alternatives = (
+            len(raw_response.results[0].alternatives)
+            if raw_response and getattr(raw_response, "results", None)
+            else 0
+        )
+
+        print(
+            f"⏱️ STT завершено за {elapsed:.2f}s: results={results_count}, alternatives_first={first_alternatives}"
+        )
         return result
     finally:
         # Після успішного виклику обов'язково прибираємо тимчасові файли

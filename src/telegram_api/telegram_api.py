@@ -82,6 +82,11 @@ class TelegramAPI:
             )
             return None
 
+        # Фіксуємо ключові ідентифікатори для подальшого дебагу завантаження.
+        print(
+            f"📥 Запит на завантаження voice: chat_id={chat_id}, message_id={message_id}, file_id={file_id}"
+        )
+
         try:
             # Отримуємо саме те повідомлення, яке містить голосове медіа.
             message = await self.client.get_messages(chat_id, ids=message_id)
@@ -105,14 +110,21 @@ class TelegramAPI:
             # Використовуємо file=bytes, щоб одразу отримати байтовий вміст без збереження на диск.
             raw_bytes = await self.client.download_media(message, file=bytes)
 
+            # Логуємо тип результату download_media та короткий прев'ю значення.
+            print(
+                f"📦 Результат download_media: type={type(raw_bytes)}, value_preview={str(raw_bytes)[:120]}"
+            )
+
             # Telethon може повернути шлях до файлу, тому підстрахуємося і дочитаємо байти вручну.
             if isinstance(raw_bytes, str):
+                print(f"🗂️ Отримано шлях до файлу voice: {raw_bytes}")
                 try:
                     with open(raw_bytes, "rb") as file:
                         raw_bytes = file.read()
                 except Exception as exc:
                     print(
-                        f"⚠️ Файл voice збережено у {raw_bytes}, але не вдалося прочитати: {exc}"
+                        "⚠️ Файл voice збережено, але не вдалося прочитати: "
+                        f"path={raw_bytes}, error={exc}"
                     )
                     return None
 
@@ -121,6 +133,12 @@ class TelegramAPI:
                     f"⚠️ Порожній результат при завантаженні voice (message_id={message_id}, file_id={file_id})."
                 )
                 return None
+
+            # Фіксуємо розмір завантажених байтів для прозорості дебагу.
+            if isinstance(raw_bytes, (bytes, bytearray)):
+                print(
+                    f"✅ Завантажено voice: bytes_len={len(raw_bytes)} (message_id={message_id}, file_id={file_id})"
+                )
 
             return raw_bytes
         except Exception as exc:
@@ -206,6 +224,20 @@ class TelegramAPI:
 
         # Визначаємо тип повідомлення і будуємо стислий опис для LLM.
         msg_type, prepared_content, media_meta = self._detect_message_type(event)
+
+        # Додатковий дебаг-лог по метаданих voice та ідентифікаторам повідомлення.
+        message_voice = getattr(event.message, "voice", None)
+        print(
+            "🔎 Деталі повідомлення: msg_type={msg_type}, media_meta={media_meta}, "
+            "message_id={mid}, voice_id={vid}, voice_duration={vdur}, voice_mime={vmime}".format(
+                msg_type=msg_type,
+                media_meta=media_meta,
+                mid=getattr(event.message, "id", None),
+                vid=getattr(message_voice, "id", None),
+                vdur=getattr(message_voice, "duration", None),
+                vmime=getattr(message_voice, "mime_type", None),
+            )
+        )
 
         print(
             "\n💬 Нове повідомлення від {user_id} в чаті {chat_id}: {text} | тип: {msg_type}".format(
