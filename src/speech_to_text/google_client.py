@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from google.cloud import speech
+from google.protobuf.json_format import MessageToJson
 
 from .config import STT_ALT_LANGUAGES, STT_PRIMARY_LANGUAGE
 
@@ -45,7 +46,23 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
     """
 
     audio = speech.RecognitionAudio(content=audio_bytes)
+
+    print("=== STT НАЛАШТУВАННЯ ===")
+    print("Encoding: OGG_OPUS")
+    print("sample_rate_hertz: 48000")
+    print(f"Основна мова: {_recognition_config.language_code}")
+    print(f"Альтернативні: {_recognition_config.alternative_language_codes}\n")
+
     response = _speech_client.recognize(config=_recognition_config, audio=audio)
+
+    # Відображаємо сирий JSON у консоль, щоб легше діагностувати помилки
+    try:
+        raw_json = MessageToJson(response)
+        print("=== RAW STT RESPONSE ===")
+        print(raw_json)
+        print("=== END RAW STT RESPONSE ===\n")
+    except Exception as exc:
+        print(f"⚠️ Не вдалося розпарсити відповідь STT у JSON: {exc}")
 
     if not response.results:
         return SpeechResult(text=None, language=None, confidence=None, raw_response=response)
