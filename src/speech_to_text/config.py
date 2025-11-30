@@ -3,6 +3,7 @@
 import os
 
 from settings import (
+    FFMPEG_PATH as SETTINGS_FFMPEG_PATH,
     GOOGLE_CREDENTIALS_PATH,
     STT_ALT_LANGUAGES,
     STT_ENABLED,
@@ -24,3 +25,6 @@ if GOOGLE_CREDENTIALS_PATH:
             f"❌ GOOGLE_CREDENTIALS_PATH не існує: {GOOGLE_CREDENTIALS_PATH}"
         )
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = GOOGLE_CREDENTIALS_PATH
+
+# Опціональний шлях до ffmpeg, який можна задати через settings.py або змінну оточення
+FFMPEG_PATH: str | None = SETTINGS_FFMPEG_PATH

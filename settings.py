@@ -99,3 +99,6 @@ STT_ALT_LANGUAGES: list[str] = ["ru-RU", "en-US"]
 
 # Тимчасова директорія для проміжних аудіофайлів
 STT_TMP_DIR: str = os.path.join("data", "audio_tmp")
+
+# Необов'язковий явний шлях до виконуваного файлу ffmpeg
+FFMPEG_PATH: str | None = os.getenv("FFMPEG_PATH")
