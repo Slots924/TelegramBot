@@ -16,11 +16,18 @@ def _run_ffmpeg(arguments: list[str]) -> None:
     :param arguments: повний список аргументів для виклику ffmpeg.
     """
 
+    # Лог з повною командою, яку збираємося виконати.
+    print(f"🎛️ Запуск ffmpeg з аргументами: {' '.join(arguments)}")
+
     process = subprocess.run(
         ["ffmpeg", *arguments],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+    )
+
+    print(
+        f"🎚️ ffmpeg завершився з кодом {process.returncode}. STDERR: {process.stderr.strip()}"
     )
 
     if process.returncode != 0:
@@ -108,13 +115,21 @@ def prepare_audio_bytes(audio_input: bytes | str, duration_seconds: float) -> tu
     # 1. Зберігаємо копію у тимчасову директорію
     temp_raw_path = save_temp_copy(audio_input)
     temp_files.append(temp_raw_path)
+    print(f"🗂️ Тимчасовий сирий файл: {temp_raw_path}")
 
     # 2. Обрізаємо до ліміту через ffmpeg
     trimmed_path = trim_audio(temp_raw_path, duration_seconds)
     temp_files.append(trimmed_path)
+    print(
+        f"✂️ Обрізаний файл: {trimmed_path} | цільова тривалість: {duration_seconds} секунд"
+    )
 
     # 3. Читаємо байти готового OGG-файлу без додаткової конвертації
     with open(trimmed_path, "rb") as file:
         audio_bytes = file.read()
+
+    print(
+        f"📏 Розмір підготовленого файлу: {len(audio_bytes)} байтів (джерело: {trimmed_path})"
+    )
 
     return audio_bytes, temp_files
