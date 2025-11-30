@@ -128,10 +128,20 @@ class TelegramAPI:
             return
 
         chat_id = event.chat_id      # ID чату (для приватного = user_id)
-        text = event.message.message # текст повідомлення
+        text = event.message.message # текст повідомлення або підпис до медіа
         message_date = event.message.date or datetime.now(timezone.utc)
 
-        print(f"\n💬 Нове повідомлення від {user_id} в чаті {chat_id}: {text}")
+        # Визначаємо тип повідомлення і будуємо стислий опис для LLM.
+        msg_type, prepared_content, media_meta = self._detect_message_type(event)
+
+        print(
+            "\n💬 Нове повідомлення від {user_id} в чаті {chat_id}: {text} | тип: {msg_type}".format(
+                user_id=user_id,
+                chat_id=chat_id,
+                text=text,
+                msg_type=msg_type,
+            )
+        )
 
         # Перевіряємо та зберігаємо user_info.txt, якщо його ще немає
         chat_title = getattr(event.chat, "title", None)
@@ -153,10 +163,238 @@ class TelegramAPI:
         await self._router.handle_incoming_message(
             user_id=user_id,
             chat_id=chat_id,
-            text=text,
+            content=prepared_content,
+            msg_type=msg_type,
+            media_meta=media_meta,
             message_time=message_date,
             message_id=getattr(event.message, "id", None),
         )
+
+    def _detect_message_type(self, event) -> tuple[str, str, dict]:
+        """Визначає тип вхідного повідомлення та повертає опис для LLM.
+
+        Повертає трійку (msg_type, content, media_meta), де:
+        - msg_type — назва типу (text, voice, audio, video_note, video, document, photo).
+        - content — короткий рядок-опис для LLM у форматі з інструкцій.
+        - media_meta — словник із метаданими файлу/медіа.
+        """
+
+        message = event.message
+
+        if message.voice:
+            media_meta = self._extract_audio_meta(message.voice, message)
+            content = self._render_voice_description(media_meta)
+            return "voice", content, media_meta
+
+        if message.audio:
+            media_meta = self._extract_audio_meta(message.audio, message)
+            content = self._render_audio_description(media_meta)
+            return "audio", content, media_meta
+
+        if message.video_note:
+            media_meta = self._extract_video_meta(message.video_note, message)
+            content = self._render_video_note_description(media_meta)
+            return "video_note", content, media_meta
+
+        if message.video:
+            media_meta = self._extract_video_meta(message.video, message)
+            content = self._render_video_description(media_meta)
+            return "video", content, media_meta
+
+        if message.document:
+            media_meta = self._extract_document_meta(message.document, message)
+            content = self._render_document_description(media_meta)
+            return "document", content, media_meta
+
+        if message.photo:
+            media_meta = self._extract_photo_meta(message.photo, message)
+            content = self._render_photo_description(media_meta)
+            return "photo", content, media_meta
+
+        # Якщо медіа немає, вважаємо звичайним текстом.
+        media_meta = {"caption": message.message or ""}
+        return "text", message.message or "", media_meta
+
+    @staticmethod
+    def _extract_audio_meta(document, message) -> dict:
+        """Дістає базові метадані для voice/audio файлів."""
+
+        duration = None
+        title = None
+        performer = None
+        file_name = None
+        mime_type = getattr(document, "mime_type", None)
+
+        for attribute in getattr(document, "attributes", []) or []:
+            if isinstance(attribute, types.DocumentAttributeAudio):
+                duration = getattr(attribute, "duration", None)
+                title = getattr(attribute, "title", None)
+                performer = getattr(attribute, "performer", None)
+            if isinstance(attribute, types.DocumentAttributeFilename):
+                file_name = getattr(attribute, "file_name", None)
+
+        return {
+            "file_id": getattr(document, "id", None),
+            "duration": duration,
+            "mime_type": mime_type,
+            "file_name": file_name,
+            "performer": performer,
+            "title": title,
+            "size": getattr(document, "size", None),
+            "caption": message.message or "",
+        }
+
+    @staticmethod
+    def _extract_video_meta(document, message) -> dict:
+        """Дістає базові метадані для відео та video_note."""
+
+        duration = None
+        width = None
+        height = None
+        file_name = None
+        mime_type = getattr(document, "mime_type", None)
+
+        for attribute in getattr(document, "attributes", []) or []:
+            if isinstance(attribute, types.DocumentAttributeVideo):
+                duration = getattr(attribute, "duration", None)
+                width = getattr(attribute, "w", None)
+                height = getattr(attribute, "h", None)
+            if isinstance(attribute, types.DocumentAttributeFilename):
+                file_name = getattr(attribute, "file_name", None)
+
+        return {
+            "file_id": getattr(document, "id", None),
+            "duration": duration,
+            "mime_type": mime_type,
+            "file_name": file_name,
+            "width": width,
+            "height": height,
+            "size": getattr(document, "size", None),
+            "caption": message.message or "",
+        }
+
+    @staticmethod
+    def _extract_document_meta(document, message) -> dict:
+        """Дістає базові метадані для документів (PDF, DOC тощо)."""
+
+        file_name = None
+        for attribute in getattr(document, "attributes", []) or []:
+            if isinstance(attribute, types.DocumentAttributeFilename):
+                file_name = getattr(attribute, "file_name", None)
+
+        return {
+            "file_id": getattr(document, "id", None),
+            "file_name": file_name,
+            "mime_type": getattr(document, "mime_type", None),
+            "size": getattr(document, "size", None),
+            "caption": message.message or "",
+        }
+
+    @staticmethod
+    def _extract_photo_meta(photo, message) -> dict:
+        """Дістає базові метадані для фотографій (приблизна роздільна здатність)."""
+
+        width = None
+        height = None
+        # Беремо найбільший доступний розмір, щоб оцінити роздільну здатність.
+        best_size = None
+        for size in getattr(photo, "sizes", []) or []:
+            if hasattr(size, "w") and hasattr(size, "h"):
+                if best_size is None:
+                    best_size = size
+                else:
+                    best_area = getattr(best_size, "w", 0) * getattr(best_size, "h", 0)
+                    current_area = getattr(size, "w", 0) * getattr(size, "h", 0)
+                    if current_area > best_area:
+                        best_size = size
+
+        if best_size:
+            width = getattr(best_size, "w", None)
+            height = getattr(best_size, "h", None)
+
+        return {
+            "file_id": getattr(photo, "id", None),
+            "width": width,
+            "height": height,
+            "caption": message.message or "",
+        }
+
+    @staticmethod
+    def _render_voice_description(media_meta: dict) -> str:
+        """Формує текстовий опис для voice-повідомлення."""
+
+        duration = media_meta.get("duration") or "unknown"
+        return f"[VOICE_MESSAGE duration={duration}s]"
+
+    @staticmethod
+    def _render_audio_description(media_meta: dict) -> str:
+        """Формує текстовий опис для аудіотреку."""
+
+        duration = media_meta.get("duration") or "unknown"
+        title = media_meta.get("title") or ""
+        performer = media_meta.get("performer") or ""
+        parts: list[str] = [f"[AUDIO_TRACK duration={duration}s"]
+        if title:
+            parts.append(f"title=\"{title}\"")
+        if performer:
+            parts.append(f"performer=\"{performer}\"")
+        return " ".join(parts) + "]"
+
+    @staticmethod
+    def _render_video_note_description(media_meta: dict) -> str:
+        """Формує текстовий опис для video note."""
+
+        duration = media_meta.get("duration") or "unknown"
+        return f"[VIDEO_NOTE duration={duration}s]"
+
+    @staticmethod
+    def _render_video_description(media_meta: dict) -> str:
+        """Формує текстовий опис для відеофайлу."""
+
+        duration = media_meta.get("duration") or "unknown"
+        width = media_meta.get("width") or "?"
+        height = media_meta.get("height") or "?"
+        file_name = media_meta.get("file_name")
+        file_part = f' file_name="{file_name}"' if file_name else ""
+        return f"[VIDEO duration={duration}s resolution={width}x{height}{file_part}]"
+
+    def _render_document_description(self, media_meta: dict) -> str:
+        """Формує текстовий опис для документа."""
+
+        file_name = media_meta.get("file_name") or "unknown"
+        mime_type = media_meta.get("mime_type") or "unknown"
+        size_str = self._format_size(media_meta.get("size"))
+        caption = media_meta.get("caption")
+        caption_part = f' caption="{caption}"' if caption else ""
+        return (
+            f"[DOCUMENT file_name=\"{file_name}\" mime_type=\"{mime_type}\" "
+            f"size≈{size_str}{caption_part}]"
+        )
+
+    def _render_photo_description(self, media_meta: dict) -> str:
+        """Формує текстовий опис для фотографії."""
+
+        width = media_meta.get("width") or "?"
+        height = media_meta.get("height") or "?"
+        caption = media_meta.get("caption")
+        caption_part = f' caption="{caption}"' if caption else ""
+        return f"[PHOTO resolution≈{width}x{height}{caption_part}]"
+
+    @staticmethod
+    def _format_size(size_in_bytes: int | None) -> str:
+        """Перетворює розмір у байтах у читабельний вигляд (KB/MB)."""
+
+        if not size_in_bytes:
+            return "unknown"
+
+        try:
+            kb_size = size_in_bytes / 1024
+            if kb_size < 1024:
+                return f"{kb_size:.0f}KB"
+            mb_size = kb_size / 1024
+            return f"{mb_size:.1f}MB"
+        except Exception:
+            return "unknown"
 
     async def send_typing(self, chat_id: int | str, duration: float) -> None:
         """Надсилає статус "typing" та чекає потрібний час.
