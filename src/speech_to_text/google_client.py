@@ -76,11 +76,20 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
 
     # Відображаємо сирий JSON у консоль, щоб легше діагностувати помилки
     try:
-        raw_json = MessageToJson(response)
+        # В деяких версіях клієнта обʼєкт response не є protobuf напряму,
+        # тому серіалізуємо підлеглий protobuf (_pb) або використовуємо
+        # підтримуваний метод to_json(), якщо він доступний.
+        if hasattr(response, "to_json"):
+            raw_json = response.to_json()
+        else:
+            raw_json = MessageToJson(response._pb)
+
         print("=== RAW STT RESPONSE ===")
         print(raw_json)
         print("=== END RAW STT RESPONSE ===\n")
     except Exception as exc:
+        # Якщо серіалізація не вдалася, попереджаємо та продовжуємо роботу,
+        # щоб транскрипція не переривалася через проблеми з логуванням.
         print(f"⚠️ Не вдалося розпарсити відповідь STT у JSON: {exc}")
         print(traceback.format_exc())
 
