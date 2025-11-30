@@ -28,8 +28,8 @@ class SpeechResult:
 # Підготовлений клієнт та конфіг, щоб не створювати їх щоразу
 _speech_client = speech.SpeechClient()
 _recognition_config = speech.RecognitionConfig(
-    encoding=speech.RecognitionConfig.AudioEncoding.OGG_OPUS,
-    sample_rate_hertz=48000,
+    encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+    sample_rate_hertz=16000,
     language_code=STT_PRIMARY_LANGUAGE,
     alternative_language_codes=STT_ALT_LANGUAGES,
     enable_automatic_punctuation=True,
@@ -40,7 +40,7 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
     """
     Відправляє байти аудіо у Google Speech-to-Text і повертає результат.
 
-    :param audio_bytes: підготовлений файл у форматі OGG_OPUS 48000Hz.
+    :param audio_bytes: підготовлений файл у форматі WAV 16 kHz mono.
     :return: SpeechResult з текстом, мовою, впевненістю та сирою відповіддю.
     """
 
@@ -63,4 +63,3 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
         confidence=best_alternative.confidence if best_alternative.confidence else None,
         raw_response=response,
     )
-
