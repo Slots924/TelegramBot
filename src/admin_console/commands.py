@@ -68,6 +68,16 @@ class DeleteDialogCommand(BaseCommand):
 
 
 @dataclass
+class SyncUnreadCommand(BaseCommand):
+    """Синхронізація непрочитаних повідомлень конкретного користувача."""
+
+    raw_target: str
+    user_id: Optional[int]
+    username: Optional[str]
+    trigger_llm: bool
+
+
+@dataclass
 class HelpCommand(BaseCommand):
     """Вивід довідки щодо доступних команд."""
 

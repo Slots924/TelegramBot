@@ -56,6 +56,51 @@ class TelegramAPI:
         print(f"📨 Відправлено повідомлення в чат {chat_id}: {text}")
         return message
 
+    async def fetch_unread_messages(self, chat_id: int | str) -> list[dict]:
+        """Повертає всі непрочитані вхідні повідомлення у вигляді простих словників.
+
+        Ми проходимося по повідомленнях з кінця діалогу (новіші першими) і
+        зупиняємося, щойно натрапляємо на перше прочитане повідомлення.
+        Це дозволяє не сканувати всю історію, якщо непрочитані лежать блоком.
+        """
+
+        unread_messages: list[dict] = []
+        found_unread_block = False
+
+        async for message in self.client.iter_messages(chat_id, limit=None):
+            if getattr(message, "out", False):
+                # Пропускаємо наші власні повідомлення, нас цікавлять тільки вхідні.
+                continue
+
+            if getattr(message, "unread", False):
+                found_unread_block = True
+                unread_messages.append(
+                    {
+                        "id": getattr(message, "id", None),
+                        "text": getattr(message, "message", "") or "",
+                        "date": getattr(message, "date", None) or datetime.now(timezone.utc),
+                    }
+                )
+            elif found_unread_block:
+                # Якщо ми вже назбирали непрочитані та дійшли до прочитаного,
+                # вважаємо, що блок непрочитаних завершився.
+                break
+
+        # Сортуємо за id, щоб у історії повідомлення збереглись у правильному порядку (від старого до нового).
+        unread_messages.sort(key=lambda item: item.get("id") or 0)
+        return unread_messages
+
+    async def mark_messages_read(self, chat_id: int | str, max_message_id: int) -> None:
+        """Позначає повідомлення у чаті як прочитані до вказаного message_id включно."""
+
+        try:
+            await self.client.send_read_acknowledge(chat_id, max_id=max_message_id)
+            print(
+                f"👁 Позначено прочитаним чат {chat_id} до message_id={max_message_id}."
+            )
+        except Exception as exc:
+            print(f"⚠️ Не вдалося позначити повідомлення прочитаними: {exc}")
+
     async def _on_new_message(self, event) -> None:
         """
         Внутрішній обробник Telethon.

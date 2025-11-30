@@ -15,6 +15,7 @@ from src.admin_console.commands import (
     ListDialogsCommand,
     PruneHistoryCommand,
     SendMessageCommand,
+    SyncUnreadCommand,
     ShowHistoryCommand,
 )
 from src.history.history_manager import HistoryManager
@@ -259,3 +260,31 @@ async def handle_delete_dialog(
         )
     except Exception as exc:
         print(f"⚠️ Не вдалося видалити папку {user_dir}: {exc}")
+
+
+async def handle_sync_unread(
+    cmd: SyncUnreadCommand,
+    telegram: TelegramAPI,
+    history: HistoryManager,
+    router: LLMRouter,
+) -> None:
+    """Підтягує всі непрочитані повідомлення, оновлює історію та за потреби тригерить LLM."""
+
+    target_user_id, resolved_username = await _resolve_user(
+        raw_target=cmd.raw_target,
+        user_id=cmd.user_id,
+        username=cmd.username,
+        telegram=telegram,
+    )
+    chat_id = target_user_id
+
+    print(
+        "🔄 Синхронізую непрочитані повідомлення для "
+        f"{target_user_id} | {resolved_username}. trigger_llm={cmd.trigger_llm}"
+    )
+    await router.sync_unread_for_user(
+        user_id=target_user_id,
+        chat_id=chat_id,
+        trigger_llm=cmd.trigger_llm,
+    )
+    print("✅ Синхронізацію непрочитаних завершено.")
