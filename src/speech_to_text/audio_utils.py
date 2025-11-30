@@ -1,4 +1,4 @@
-"""Утиліти для обрізки та конвертації аудіо у формат WAV 16 kHz mono."""
+"""Утиліти для збереження та обрізки аудіо у форматі OGG/OPUS."""
 
 import os
 import shutil
@@ -80,35 +80,6 @@ def trim_audio(file_path: str, duration_seconds: float) -> str:
     return trimmed_path
 
 
-def convert_to_wav(file_path: str) -> tuple[bytes, str]:
-    """
-    Конвертує аудіо у формат WAV 16 kHz mono, який очікує Google STT.
-
-    :param file_path: шлях до файлу після обрізки.
-    :return: кортеж з байтами готового файлу та шляхом до тимчасового файлу.
-    """
-
-    output_path = os.path.join(STT_TMP_DIR, f"prepared_{uuid.uuid4().hex}.wav")
-
-    _run_ffmpeg([
-        "-y",
-        "-i",
-        file_path,
-        "-ac",
-        "1",  # моно
-        "-ar",
-        "16000",  # частота дискретизації 16 kHz
-        "-sample_fmt",
-        "s16",
-        output_path,
-    ])
-
-    with open(output_path, "rb") as file:
-        audio_bytes = file.read()
-
-    return audio_bytes, output_path
-
-
 def cleanup_temp_files(paths: Iterable[str]) -> None:
     """
     Видаляє тимчасові файли, які були створені під час обробки.
@@ -125,7 +96,7 @@ def cleanup_temp_files(paths: Iterable[str]) -> None:
 
 def prepare_audio_bytes(audio_input: bytes | str, duration_seconds: float) -> tuple[bytes, list[str]]:
     """
-    Повний цикл підготовки аудіо: зберегти, обрізати, сконвертувати у WAV.
+    Повний цикл підготовки аудіо: зберегти та за потреби обрізати OGG/OPUS.
 
     :param audio_input: байти або шлях до файлу з вхідним аудіо.
     :param duration_seconds: тривалість оригінального аудіо, щоб обрізати до ліміту.
@@ -142,8 +113,8 @@ def prepare_audio_bytes(audio_input: bytes | str, duration_seconds: float) -> tu
     trimmed_path = trim_audio(temp_raw_path, duration_seconds)
     temp_files.append(trimmed_path)
 
-    # 3. Конвертуємо у WAV 16kHz mono
-    audio_bytes, prepared_path = convert_to_wav(trimmed_path)
-    temp_files.append(prepared_path)
+    # 3. Читаємо байти готового OGG-файлу без додаткової конвертації
+    with open(trimmed_path, "rb") as file:
+        audio_bytes = file.read()
 
     return audio_bytes, temp_files
