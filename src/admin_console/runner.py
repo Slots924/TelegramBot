@@ -11,6 +11,7 @@ from src.admin_console.commands import (
     ExitCommand,
     HelpCommand,
     ListDialogsCommand,
+    RefreshMetaCommand,
     PruneHistoryCommand,
     SendMessageCommand,
     SyncUnreadCommand,
@@ -21,6 +22,7 @@ from src.admin_console.handlers import (
     handle_delete_dialog,
     handle_list_dialogs,
     handle_prune_history,
+    handle_refresh_meta,
     handle_send_message,
     handle_sync_unread,
     handle_show_history,
@@ -48,6 +50,7 @@ def _print_help() -> None:
   show_history <target> [limit]       — показати останні N повідомлень (дефолт 10)
   prune_history <target> [keep]       — залишити лише N останніх чанків (дефолт 5)
   delete_dialog <target>              — повністю видалити діалог
+  refresh_meta                        — оновити метадані всіх чанків діалогів
   sync_unread <target> [trigger]      — підтягнути непрочитані та позначити їх прочитаними (з trigger запустить LLM)
   help                                — показати цю підказку
   exit                                — завершити роботу консолі
@@ -103,6 +106,8 @@ async def run_admin_console(
                     history=history,
                     router=router,
                 )
+            elif isinstance(command, RefreshMetaCommand):
+                await handle_refresh_meta(history=history)
             else:
                 print("⚠️ Невідома команда після парсингу.")
         except Exception as exc:

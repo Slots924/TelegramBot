@@ -583,10 +583,32 @@ class LLMRouter:
         завдання лише оновити історію й позначити все прочитаним.
         """
 
-        unread_messages = await self.telegram.fetch_unread_messages(chat_id)
+        try:
+            last_user_message_id = self.history.get_last_user_message_id(user_id)
+        except Exception as exc:
+            print(
+                f"⚠️ Не вдалося отримати last_user_message_id з історії для {user_id}: {exc}"
+            )
+            last_user_message_id = 0
+
+        if last_user_message_id:
+            print(
+                f"ℹ️ Останній збережений message_id користувача: {last_user_message_id}."
+                " Підтягуємо все, що прийшло після нього."
+            )
+            unread_messages = await self.telegram.fetch_messages_after(
+                chat_id, last_message_id=last_user_message_id
+            )
+        else:
+            print(
+                "ℹ️ last_user_message_id відсутній або дорівнює 0. "
+                "Схоже, історія ще не збережена — беремо 20 останніх вхідних повідомлень."
+            )
+            unread_messages = await self.telegram.fetch_recent_incoming_messages(chat_id, limit=20)
+
         if not unread_messages:
             print(
-                f"ℹ️ Непрочитаних повідомлень не знайдено для користувача {user_id} у чаті {chat_id}."
+                f"ℹ️ Нових вхідних повідомлень не знайдено для користувача {user_id} у чаті {chat_id}."
             )
             return
 
@@ -617,7 +639,7 @@ class LLMRouter:
         if max_message_id:
             await self.telegram.mark_messages_read(chat_id, max_message_id)
         print(
-            f"📥 Додано {len(unread_messages)} непрочитаних повідомлень у історію для користувача {user_id}."
+            f"📥 Додано {len(unread_messages)} повідомлень у історію для користувача {user_id}."
         )
 
         if trigger_llm:

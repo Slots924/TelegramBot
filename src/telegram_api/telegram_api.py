@@ -187,6 +187,69 @@ class TelegramAPI:
         unread_messages.sort(key=lambda item: item.get("id") or 0)
         return unread_messages
 
+    async def fetch_messages_after(
+        self, chat_id: int | str, last_message_id: int, limit: int | None = None
+    ) -> list[dict]:
+        """Повертає всі вхідні повідомлення після last_message_id включно.
+
+        Використовується для догрузки пропущених повідомлень навіть якщо вони вже
+        позначені прочитаними. Якщо limit передано, зрізаємо результат до цього
+        розміру з кінця (щоб залишились найновіші).
+        """
+
+        collected: list[dict] = []
+
+        async for message in self.client.iter_messages(chat_id, min_id=last_message_id):
+            if getattr(message, "out", False):
+                continue
+
+            msg_type, prepared_content, media_meta = self._detect_message_type(message)
+            collected.append(
+                {
+                    "id": getattr(message, "id", None),
+                    "text": prepared_content,
+                    "date": getattr(message, "date", None) or datetime.now(timezone.utc),
+                    "msg_type": msg_type,
+                    "media_meta": media_meta,
+                }
+            )
+
+        collected.sort(key=lambda item: item.get("id") or 0)
+
+        if limit is not None and len(collected) > limit:
+            collected = collected[-limit:]
+
+        return collected
+
+    async def fetch_recent_incoming_messages(
+        self, chat_id: int | str, limit: int = 20
+    ) -> list[dict]:
+        """Повертає останні N вхідних повідомлень користувача.
+
+        Фільтруємо лише не наші повідомлення (out=False), щоб зібрати чисту
+        історію користувача для ініціалізації діалогу.
+        """
+
+        collected: list[dict] = []
+
+        async for message in self.client.iter_messages(chat_id, limit=limit):
+            if getattr(message, "out", False):
+                continue
+
+            msg_type, prepared_content, media_meta = self._detect_message_type(message)
+            collected.append(
+                {
+                    "id": getattr(message, "id", None),
+                    "text": prepared_content,
+                    "date": getattr(message, "date", None) or datetime.now(timezone.utc),
+                    "msg_type": msg_type,
+                    "media_meta": media_meta,
+                }
+            )
+
+        collected.sort(key=lambda item: item.get("id") or 0)
+        return collected
+
     async def mark_messages_read(self, chat_id: int | str, max_message_id: int) -> None:
         """Позначає повідомлення у чаті як прочитані до вказаного message_id включно."""
 
