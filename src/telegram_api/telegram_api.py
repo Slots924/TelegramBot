@@ -161,14 +161,27 @@ class TelegramAPI:
         unread_messages: list[dict] = []
         found_unread_block = False
 
+        print(
+            "📡 Старт fetch_unread_messages | "
+            f"chat_id={chat_id} | history_base_dir={HISTORY_BASE_DIR}"
+        )
+
         async for message in self.client.iter_messages(chat_id, limit=None):
             if getattr(message, "out", False):
                 # Пропускаємо наші власні повідомлення, нас цікавлять тільки вхідні.
+                print(
+                    "↩️ Пропущено вихідне повідомлення | "
+                    f"id={getattr(message, 'id', None)}"
+                )
                 continue
 
             if getattr(message, "unread", False):
                 found_unread_block = True
                 msg_type, prepared_content, media_meta = self._detect_message_type(message)
+                print(
+                    "🆕 Знайшли непрочитане повідомлення | "
+                    f"id={getattr(message, 'id', None)} | type={msg_type} | text={prepared_content}"
+                )
                 unread_messages.append(
                     {
                         "id": getattr(message, "id", None),
@@ -181,10 +194,17 @@ class TelegramAPI:
             elif found_unread_block:
                 # Якщо ми вже назбирали непрочитані та дійшли до прочитаного,
                 # вважаємо, що блок непрочитаних завершився.
+                print(
+                    "⛔️ Натрапили на перше прочитане повідомлення | зупиняємо ітерацію"
+                )
                 break
 
         # Сортуємо за id, щоб у історії повідомлення збереглись у правильному порядку (від старого до нового).
         unread_messages.sort(key=lambda item: item.get("id") or 0)
+        print(
+            "📑 Результат fetch_unread_messages | "
+            f"кількість={len(unread_messages)} | ids={[msg.get('id') for msg in unread_messages]}"
+        )
         return unread_messages
 
     async def mark_messages_read(self, chat_id: int | str, max_message_id: int) -> None:
@@ -196,7 +216,10 @@ class TelegramAPI:
                 f"👁 Позначено прочитаним чат {chat_id} до message_id={max_message_id}."
             )
         except Exception as exc:
-            print(f"⚠️ Не вдалося позначити повідомлення прочитаними: {exc}")
+            print(
+                "❗️ Помилка позначення прочитаного | "
+                f"chat_id={chat_id} | max_message_id={max_message_id} | error={exc}"
+            )
 
     async def _on_new_message(self, event) -> None:
         """

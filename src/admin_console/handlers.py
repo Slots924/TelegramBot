@@ -396,9 +396,16 @@ async def handle_sync_unread(
         "🔄 Синхронізую непрочитані повідомлення для "
         f"{target_user_id} | {resolved_username}. trigger_llm={cmd.trigger_llm}"
     )
+    print(
+        "👀 Деталі: перед викликом router.sync_unread_for_user | "
+        f"chat_id={chat_id} | user_id={target_user_id}"
+    )
     await router.sync_unread_for_user(
         user_id=target_user_id,
         chat_id=chat_id,
         trigger_llm=cmd.trigger_llm,
+    )
+    print(
+        "📊 Після router.sync_unread_for_user | перевіряємо, чи була додана історія"
     )
     print("✅ Синхронізацію непрочитаних завершено.")
