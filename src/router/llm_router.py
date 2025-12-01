@@ -537,7 +537,7 @@ class LLMRouter:
         self,
         user_id: int,
         chat_id: int,
-        instruction: str = "Згенеруй одне дружнє повідомлення для користувача",
+        instruction: str = "Згенеруй повідомлення для користувача",
     ) -> None:
         """Просить LLM створити JSON із однією дією надсилання повідомлення і виконує її.
 
@@ -548,10 +548,8 @@ class LLMRouter:
 
         messages_for_llm = self._build_llm_messages(user_id=user_id)
         proactive_instruction = (
-            "Система сама ініціює контакт із користувачем. Сформуй JSON-дії зі списку\n"
-            "[send_message, send_messages, fake_typing] так, щоб у підсумку було відправлене\n"
-            "хоча б одне текстове повідомлення. Не запускай очікування нових вхідних,\n"
-            "не додавай інструкцій для нескінченного циклу. "
+            "Згенеруй повідомлення для користувача"
+           
             f"{instruction}"
         )
         messages_for_llm.append({"role": "system", "content": proactive_instruction})
