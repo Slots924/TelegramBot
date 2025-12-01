@@ -11,6 +11,7 @@ from src.admin_console.commands import (
     ExitCommand,
     HelpCommand,
     ListDialogsCommand,
+    RefreshMetaCommand,
     PruneHistoryCommand,
     SendMessageCommand,
     SyncUnreadCommand,
@@ -139,6 +140,9 @@ def parse_command(line: str) -> BaseCommand:
 
     if cmd == "help":
         return HelpCommand(name="help")
+
+    if cmd == "refresh_meta":
+        return RefreshMetaCommand(name="refresh_meta")
 
     if cmd == "exit":
         return ExitCommand(name="exit")

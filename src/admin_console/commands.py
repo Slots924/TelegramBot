@@ -78,6 +78,11 @@ class SyncUnreadCommand(BaseCommand):
 
 
 @dataclass
+class RefreshMetaCommand(BaseCommand):
+    """Оновлення метаданих усіх чанків діалогів до актуального формату."""
+
+
+@dataclass
 class HelpCommand(BaseCommand):
     """Вивід довідки щодо доступних команд."""
 

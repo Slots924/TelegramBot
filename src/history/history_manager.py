@@ -14,7 +14,7 @@ HistoryManager:
 import json
 import os
 from datetime import datetime, timezone
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 from .config import (
     HISTORY_BASE_DIR,
@@ -89,7 +89,7 @@ class HistoryManager:
                 "user_id": None,
                 "chunk_index": None,
                 "messages": [],
-                "meta": {},
+                "meta": self._build_default_meta(),
             }
 
         try:
@@ -101,7 +101,7 @@ class HistoryManager:
                 "user_id": None,
                 "chunk_index": None,
                 "messages": [],
-                "meta": {},
+                "meta": self._build_default_meta(),
             }
 
     def _save_chunk(self, path: str, data: Dict[str, Any]) -> None:
@@ -142,10 +142,7 @@ class HistoryManager:
                 "user_id": user_id,
                 "chunk_index": 1,
                 "messages": [],
-                "meta": {
-                    "created_at": self._now_iso(),
-                    "updated_at": self._now_iso(),
-                },
+                "meta": self._build_default_meta(),
             }
         else:
             chunk_path = last_chunk_path
@@ -161,10 +158,7 @@ class HistoryManager:
                 "user_id": user_id,
                 "chunk_index": chunk_index,
                 "messages": [],
-                "meta": {
-                    "created_at": self._now_iso(),
-                    "updated_at": self._now_iso(),
-                },
+                "meta": self._build_default_meta(),
             }
 
         # Додаємо нове повідомлення
@@ -176,6 +170,7 @@ class HistoryManager:
             "message_id": message_id,
         }
         chunk_data["messages"].append(message)
+        self._ensure_meta(chunk_data)
         chunk_data["meta"]["updated_at"] = self._now_iso()
 
         # Зберігаємо чанк
@@ -202,6 +197,54 @@ class HistoryManager:
             messages.extend(msgs)
 
         return messages
+
+    def get_last_user_message_id(self, user_id: int) -> int:
+        """Повертає message_id останнього користувацького повідомлення з історії.
+
+        Якщо чанків немає або у них відсутні коректні дані — повертає 0.
+        Метод потрібен для синхронізації історії з Telegram.
+        """
+
+        last_chunk_path = self._get_last_chunk_path(user_id)
+        if last_chunk_path is None:
+            return 0
+
+        try:
+            chunk_data = self._load_chunk(last_chunk_path)
+            self._ensure_meta(chunk_data)
+            last_user_id = chunk_data.get("meta", {}).get("last_user_message_id")
+            return int(last_user_id) if last_user_id else 0
+        except Exception:
+            # Якщо трапилась будь-яка проблема — повертаємо 0, щоб вище рівні могли зробити fallback.
+            return 0
+
+    def refresh_all_chunk_meta(self) -> Tuple[int, int]:
+        """Перебудовує метадані для всіх існуючих чанків у файловій системі.
+
+        Повертає кортеж (оновлено, всього), щоб хендлер міг вивести статистику.
+        """
+
+        updated = 0
+        total = 0
+
+        for root, _, files in os.walk(HISTORY_BASE_DIR):
+            for filename in files:
+                if not filename.startswith("chunk_") or not filename.endswith(".json"):
+                    continue
+
+                total += 1
+                chunk_path = os.path.join(root, filename)
+                chunk_data = self._load_chunk(chunk_path)
+                before_meta = json.dumps(chunk_data.get("meta") or {}, sort_keys=True)
+
+                self._ensure_meta(chunk_data)
+                after_meta = json.dumps(chunk_data.get("meta") or {}, sort_keys=True)
+
+                if before_meta != after_meta:
+                    updated += 1
+                    self._save_chunk(chunk_path, chunk_data)
+
+        return updated, total
 
     # =====================
     # Статичні утиліти
@@ -231,3 +274,84 @@ class HistoryManager:
             return parsed.strftime("%Y-%m-%dT%H:%M:%S")
         except Exception:
             return HistoryManager._now_iso()
+
+    def _build_default_meta(self) -> Dict[str, Any]:
+        """Створює базову структуру meta з усіма необхідними полями."""
+
+        return {
+            "created_at": self._now_iso(),
+            "updated_at": self._now_iso(),
+            "last_user_message_id": None,
+            "last_assistant_message_id": None,
+        }
+
+    def _ensure_meta(self, chunk_data: Dict[str, Any]) -> None:
+        """Гарантує наявність і коректність полів meta для конкретного чанка."""
+
+        meta = chunk_data.get("meta") or {}
+        messages = chunk_data.get("messages") or []
+
+        # Визначаємо часи створення та оновлення на основі наявних даних.
+        meta_created = meta.get("created_at") or self._extract_first_timestamp(messages)
+        meta_updated = meta.get("updated_at") or self._extract_last_timestamp(messages)
+
+        meta["created_at"] = self._normalize_created_at(meta_created)
+        meta["updated_at"] = self._normalize_created_at(meta_updated)
+
+        # Рахуємо останні message_id для кожної ролі.
+        last_user_id, last_assistant_id = self._calculate_last_message_ids(messages)
+        meta["last_user_message_id"] = last_user_id
+        meta["last_assistant_message_id"] = last_assistant_id
+
+        chunk_data["meta"] = meta
+
+    def _calculate_last_message_ids(self, messages: List[Dict[str, Any]]) -> Tuple[int | None, int | None]:
+        """Шукає останні message_id для ролей user та assistant серед переданих повідомлень."""
+
+        last_user_id = None
+        last_assistant_id = None
+
+        for message in messages:
+            role = message.get("role")
+            msg_id = message.get("message_id")
+            if msg_id is None:
+                continue
+
+            if role == "user":
+                last_user_id = msg_id
+            elif role == "assistant":
+                last_assistant_id = msg_id
+
+        return last_user_id, last_assistant_id
+
+    def _extract_first_timestamp(self, messages: List[Dict[str, Any]]) -> str:
+        """Знаходить найстарішу дату серед повідомлень або повертає поточний час."""
+
+        if not messages:
+            return self._now_iso()
+
+        created_values = [msg.get("created_at") for msg in messages if msg.get("created_at")]
+        if not created_values:
+            return self._now_iso()
+
+        try:
+            parsed = [self._normalize_created_at(value) for value in created_values]
+            return min(parsed)
+        except Exception:
+            return self._now_iso()
+
+    def _extract_last_timestamp(self, messages: List[Dict[str, Any]]) -> str:
+        """Знаходить найновішу дату серед повідомлень або повертає поточний час."""
+
+        if not messages:
+            return self._now_iso()
+
+        created_values = [msg.get("created_at") for msg in messages if msg.get("created_at")]
+        if not created_values:
+            return self._now_iso()
+
+        try:
+            parsed = [self._normalize_created_at(value) for value in created_values]
+            return max(parsed)
+        except Exception:
+            return self._now_iso()

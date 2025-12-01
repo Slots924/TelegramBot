@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -14,6 +15,7 @@ from src.admin_console.commands import (
     DeleteDialogCommand,
     ListDialogsCommand,
     PruneHistoryCommand,
+    RefreshMetaCommand,
     SendMessageCommand,
     SyncUnreadCommand,
     ShowHistoryCommand,
@@ -374,6 +376,20 @@ async def handle_delete_dialog(
         )
     except Exception as exc:
         print(f"⚠️ Не вдалося видалити папку {user_dir}: {exc}")
+
+
+async def handle_refresh_meta(history: HistoryManager) -> None:
+    """Проходить по всіх чанках і оновлює метадані до нового формату."""
+
+    updated, total = await asyncio.to_thread(history.refresh_all_chunk_meta)
+    if total == 0:
+        print("ℹ️ Не знайдено жодного чанка для оновлення.")
+        return
+
+    print(
+        f"🛠️ Оновлено метадані у {updated} з {total} чанків."
+        " Перевірте, що тепер збережені last_user_message_id та last_assistant_message_id."
+    )
 
 
 async def handle_sync_unread(
