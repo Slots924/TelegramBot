@@ -16,7 +16,10 @@ async def main() -> None:
 
     # Вказуємо окремий .session файл, щоб авторизація адмін-консолі
     # не конфліктувала з основним користувацьким клієнтом.
-    telegram_api = TelegramAPI(session_name=ADMIN_CONSOLE_SESSION_NAME)
+    telegram_api = TelegramAPI(
+        session_name=ADMIN_CONSOLE_SESSION_NAME,
+        enable_incoming=False,
+    )
     llm_api = LLMAPI()
     history = HistoryManager()
     system_prompt = load_system_prompt()

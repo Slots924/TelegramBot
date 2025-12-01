@@ -12,7 +12,7 @@ from .config import SESSION_DIR, SESSION_NAME, TELEGRAM_API_HASH, TELEGRAM_API_I
 class TelegramAPI:
     """Клас-обгортка для Telegram-клієнта (Telethon)."""
 
-    def __init__(self, session_name: str | None = None):
+    def __init__(self, session_name: str | None = None, enable_incoming: bool = True):
         """Готує клієнт Telethon з обраним .session файлом.
 
         Параметри
@@ -20,6 +20,10 @@ class TelegramAPI:
         session_name: str | None
             Назва .session файлу без розширення. Якщо не передано — береться
             значення з .env для основного користувача або окремо для адмін-консолі.
+        enable_incoming: bool
+            Дозволяє або забороняє підписуватися на вхідні події.
+            Якщо False — клієнт працює лише на вихідні команди/читання історії,
+            нові апдейти не слухаємо.
         """
 
         # Папка для зберігання .session (створюємо один раз на старті)
@@ -32,17 +36,21 @@ class TelegramAPI:
         # Ініціалізуємо клієнт
         self.client = TelegramClient(session_path, TELEGRAM_API_ID, TELEGRAM_API_HASH)
 
+        # Зберігаємо прапорець, чи потрібно слухати вхідні події
+        self._enable_incoming = enable_incoming
+
         # Роутер ми підставимо пізніше через set_router()
         self._router = None
 
-        # Реєструємо обробник нових вхідних повідомлень
-        # incoming=True — ловимо тільки повідомлення від інших користувачів
-        self.client.add_event_handler(
-            self._on_new_message,
-            events.NewMessage(incoming=True)
-        )
-        # Ловимо оновлення по реакціях, щоб фіксувати, як користувачі реагують на наші відповіді.
-        self.client.add_event_handler(self._on_message_reaction, events.Raw())
+        # Реєструємо обробники тільки якщо вхідний потік дозволено
+        if self._enable_incoming:
+            # incoming=True — ловимо тільки повідомлення від інших користувачів
+            self.client.add_event_handler(
+                self._on_new_message,
+                events.NewMessage(incoming=True)
+            )
+            # Ловимо оновлення по реакціях, щоб фіксувати, як користувачі реагують на наші відповіді.
+            self.client.add_event_handler(self._on_message_reaction, events.Raw())
 
     def set_router(self, router) -> None:
         """Прив'язуємо роутер, який буде обробляти вхідні повідомлення."""
@@ -189,6 +197,10 @@ class TelegramAPI:
         Внутрішній обробник Telethon.
         Викликається щоразу, коли приходить нове вхідне повідомлення.
         """
+        # Якщо вхідні вимкнені (наприклад, адмін-консоль), одразу виходимо.
+        if not self._enable_incoming:
+            return
+
         # Обробляємо тільки приватні діалоги, групи та канали пропускаємо без логів.
         if not event.is_private:
             return
