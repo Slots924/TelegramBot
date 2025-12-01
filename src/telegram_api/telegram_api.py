@@ -7,17 +7,27 @@ from telethon import TelegramClient, events, functions, types, utils
 from telethon.tl.types import Channel, Chat, User
 
 from settings import ANSWER_TO_TELEGRAM_BOTS, HISTORY_BASE_DIR, USER_INFO_FILENAME
-from .config import TELEGRAM_API_HASH, TELEGRAM_API_ID, SESSION_NAME
+from .config import SESSION_DIR, SESSION_NAME, TELEGRAM_API_HASH, TELEGRAM_API_ID
 
 class TelegramAPI:
     """Клас-обгортка для Telegram-клієнта (Telethon)."""
 
-    def __init__(self):
-        # Папка для зберігання .session
-        session_dir = os.path.join(os.path.dirname(__file__), "sessions")
-        os.makedirs(session_dir, exist_ok=True)
+    def __init__(self, session_name: str | None = None):
+        """Готує клієнт Telethon з обраним .session файлом.
 
-        session_path = os.path.join(session_dir, SESSION_NAME)
+        Параметри
+        ----------
+        session_name: str | None
+            Назва .session файлу без розширення. Якщо не передано — береться
+            значення з .env для основного користувача або окремо для адмін-консолі.
+        """
+
+        # Папка для зберігання .session (створюємо один раз на старті)
+        os.makedirs(SESSION_DIR, exist_ok=True)
+
+        # Вибір конкретного .session файлу залежно від сценарію використання
+        target_session = session_name or SESSION_NAME
+        session_path = os.path.join(SESSION_DIR, target_session)
 
         # Ініціалізуємо клієнт
         self.client = TelegramClient(session_path, TELEGRAM_API_ID, TELEGRAM_API_HASH)

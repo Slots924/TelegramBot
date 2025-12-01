@@ -7,13 +7,16 @@ from src.history.history_manager import HistoryManager
 from src.llm_api.llm_api import LLMAPI
 from src.llm_api.utils.loader import load_system_prompt
 from src.router.llm_router import LLMRouter
+from src.telegram_api.config import ADMIN_CONSOLE_SESSION_NAME
 from src.telegram_api.telegram_api import TelegramAPI
 
 
 async def main() -> None:
     """Готує залежності та запускає інтерктивну адмін-консоль."""
 
-    telegram_api = TelegramAPI()
+    # Вказуємо окремий .session файл, щоб авторизація адмін-консолі
+    # не конфліктувала з основним користувацьким клієнтом.
+    telegram_api = TelegramAPI(session_name=ADMIN_CONSOLE_SESSION_NAME)
     llm_api = LLMAPI()
     history = HistoryManager()
     system_prompt = load_system_prompt()

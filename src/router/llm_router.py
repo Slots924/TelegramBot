@@ -533,6 +533,47 @@ class LLMRouter:
         actions = self._parse_actions(answer_raw)
         await self._execute_actions(chat_id=chat_id, user_id=user_id, actions=actions)
 
+    async def send_single_message_proactively(
+        self,
+        user_id: int,
+        chat_id: int,
+        instruction: str = "Згенеруй одне дружнє повідомлення для користувача",
+    ) -> None:
+        """Просить LLM створити JSON із однією дією надсилання повідомлення і виконує її.
+
+        Використовується в адмін-консолі, коли хочемо ініціювати діалог без нового
+        вхідного тексту. Метод не чіпає внутрішній стан inbox/debounce, тому після
+        виконання дій цикл слухання не запускається.
+        """
+
+        messages_for_llm = self._build_llm_messages(user_id=user_id)
+        proactive_instruction = (
+            "Система сама ініціює контакт із користувачем. Сформуй JSON-дії зі списку\n"
+            "[send_message, send_messages, fake_typing] так, щоб у підсумку було відправлене\n"
+            "хоча б одне текстове повідомлення. Не запускай очікування нових вхідних,\n"
+            "не додавай інструкцій для нескінченного циклу. "
+            f"{instruction}"
+        )
+        messages_for_llm.append({"role": "system", "content": proactive_instruction})
+
+        try:
+            answer_raw = await asyncio.to_thread(self.llm.generate, messages_for_llm)
+        except Exception as exc:
+            print(f"❌ Помилка при виклику LLM (admin proactive) для {user_id}: {exc}")
+            answer_raw = "[]"
+
+        print("\n================= RAW LLM RESPONSE (admin proactive) =================")
+        try:
+            parsed = json.loads(answer_raw)
+            pretty = json.dumps(parsed, ensure_ascii=False, indent=2)
+            print(pretty)
+        except Exception:
+            print(answer_raw)
+        print("====================================================================\n")
+
+        actions = self._parse_actions(answer_raw)
+        await self._execute_actions(chat_id=chat_id, user_id=user_id, actions=actions)
+
     async def sync_unread_for_user(
         self, user_id: int, chat_id: int, trigger_llm: bool = False
     ) -> None:
