@@ -575,7 +575,13 @@ class LLMRouter:
     async def sync_unread_for_user(
         self, user_id: int, chat_id: int, trigger_llm: bool = False
     ) -> None:
-        """Синхронізує непрочитані повідомлення користувача та за потреби запускає LLM."""
+        """Синхронізує непрочитані повідомлення користувача без виклику LLM.
+
+        Метод використовується в адмін-консолі, коли потрібно просто
+        підтягнути накопичені вхідні меседжі. Ми не запускаємо debounce та
+        не звертаємося до LLM, навіть якщо передано trigger_llm=True, бо
+        завдання лише оновити історію й позначити все прочитаним.
+        """
 
         unread_messages = await self.telegram.fetch_unread_messages(chat_id)
         if not unread_messages:
@@ -586,6 +592,8 @@ class LLMRouter:
 
         for message in unread_messages:
             content = message.get("text") or ""
+            msg_type = message.get("msg_type") or "text"
+            media_meta = message.get("media_meta") or {}
             message_id = message.get("id")
             message_date = message.get("date")
             message_time_iso = (
@@ -600,6 +608,10 @@ class LLMRouter:
                 message_time_iso=message_time_iso,
                 message_id=message_id,
             )
+            print(
+                "📌 Додано повідомлення з sync_unread: "
+                f"type={msg_type} | id={message_id} | text={content}"
+            )
 
         max_message_id = max((msg.get("id") or 0 for msg in unread_messages), default=0)
         if max_message_id:
@@ -608,27 +620,12 @@ class LLMRouter:
             f"📥 Додано {len(unread_messages)} непрочитаних повідомлень у історію для користувача {user_id}."
         )
 
-        if not trigger_llm:
-            return
-
-        messages_for_llm = self._build_llm_messages(user_id=user_id)
-        try:
-            answer_raw = await asyncio.to_thread(self.llm.generate, messages_for_llm)
-        except Exception as exc:
-            print(f"❌ Помилка при виклику LLM (sync_unread) для {user_id}: {exc}")
-            answer_raw = "[]"
-
-        print("\n================= RAW LLM RESPONSE (sync_unread) =================")
-        try:
-            parsed = json.loads(answer_raw)
-            pretty = json.dumps(parsed, ensure_ascii=False, indent=2)
-            print(pretty)
-        except Exception:
-            print(answer_raw)
-        print("================================================================\n")
-
-        actions = self._parse_actions(answer_raw)
-        await self._execute_actions(chat_id=chat_id, user_id=user_id, actions=actions)
+        if trigger_llm:
+            # Явно повідомляємо, що генерація вимкнена, щоби адмін розумів поведінку.
+            print(
+                "ℹ️ Запуск LLM через sync_unread вимкнений: команда лише синхронізує історію"
+                " і не надсилає відповіді користувачу."
+            )
 
     def _build_llm_messages(self, user_id: int) -> List[dict]:
         """Формує список повідомлень для LLM з урахуванням системних промптів та історії."""

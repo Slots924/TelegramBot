@@ -153,6 +153,9 @@ class TelegramAPI:
         Ми проходимося по повідомленнях з кінця діалогу (новіші першими) і
         зупиняємося, щойно натрапляємо на перше прочитане повідомлення.
         Це дозволяє не сканувати всю історію, якщо непрочитані лежать блоком.
+
+        Відразу описуємо тип повідомлення через _detect_message_type, щоб
+        отримати такий самий prepared_content, як під час онлайн-обробки.
         """
 
         unread_messages: list[dict] = []
@@ -165,11 +168,14 @@ class TelegramAPI:
 
             if getattr(message, "unread", False):
                 found_unread_block = True
+                msg_type, prepared_content, media_meta = self._detect_message_type(message)
                 unread_messages.append(
                     {
                         "id": getattr(message, "id", None),
-                        "text": getattr(message, "message", "") or "",
+                        "text": prepared_content,
                         "date": getattr(message, "date", None) or datetime.now(timezone.utc),
+                        "msg_type": msg_type,
+                        "media_meta": media_meta,
                     }
                 )
             elif found_unread_block:
@@ -227,7 +233,9 @@ class TelegramAPI:
         message_date = event.message.date or datetime.now(timezone.utc)
 
         # Визначаємо тип повідомлення і будуємо стислий опис для LLM.
-        msg_type, prepared_content, media_meta = self._detect_message_type(event)
+        # Використовуємо спільний детектор типів повідомлень, щоб однаково
+        # описувати медіа як для онлайн-потоку, так і для ручної синхронізації.
+        msg_type, prepared_content, media_meta = self._detect_message_type(event.message)
 
         print(
             "\n💬 Нове повідомлення від {user_id} в чаті {chat_id}: {text} | тип: {msg_type}".format(
@@ -265,16 +273,21 @@ class TelegramAPI:
             message_id=getattr(event.message, "id", None),
         )
 
-    def _detect_message_type(self, event) -> tuple[str, str, dict]:
-        """Визначає тип вхідного повідомлення та повертає опис для LLM.
+    def _detect_message_type(self, message) -> tuple[str, str, dict]:
+        """Визначає тип повідомлення та повертає опис для історії/LLM.
 
-        Повертає трійку (msg_type, content, media_meta), де:
-        - msg_type — назва типу (text, voice, audio, video_note, video, document, photo).
-        - content — короткий рядок-опис для LLM у форматі з інструкцій.
-        - media_meta — словник із метаданими файлу/медіа.
+        Параметри
+        ----------
+        message: telethon.tl.custom.message.Message
+            Об'єкт повідомлення з Telethon (може прийти як із події, так і з iter_messages).
+
+        Повертає
+        --------
+        tuple[str, str, dict]
+            msg_type — назва типу (text, voice, audio, video_note, video, document, photo).
+            content — короткий опис для історії/LLM.
+            media_meta — словник із базовими метаданими.
         """
-
-        message = event.message
 
         if message.voice:
             media_meta = self._extract_audio_meta(message.voice, message)
