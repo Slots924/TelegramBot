@@ -583,14 +583,24 @@ class LLMRouter:
         завдання лише оновити історію й позначити все прочитаним.
         """
 
+        print(
+            "🛰 Запускаємо sync_unread_for_user у роутері | "
+            f"user_id={user_id} | chat_id={chat_id} | trigger_llm={trigger_llm}"
+        )
+
         unread_messages = await self.telegram.fetch_unread_messages(chat_id)
+        print(
+            "🧾 TelegramAPI.fetch_unread_messages повернув "
+            f"{len(unread_messages)} елемент(ів) для chat_id={chat_id}"
+        )
+
         if not unread_messages:
             print(
                 f"ℹ️ Непрочитаних повідомлень не знайдено для користувача {user_id} у чаті {chat_id}."
             )
             return
 
-        for message in unread_messages:
+        for idx, message in enumerate(unread_messages, start=1):
             content = message.get("text") or ""
             msg_type = message.get("msg_type") or "text"
             media_meta = message.get("media_meta") or {}
@@ -600,6 +610,11 @@ class LLMRouter:
                 message_date.astimezone(timezone.utc).isoformat()
                 if isinstance(message_date, datetime)
                 else datetime.now(timezone.utc).isoformat()
+            )
+
+            print(
+                "➡️ Починаємо запис у історію | "
+                f"item={idx}/{len(unread_messages)} | type={msg_type} | id={message_id} | time={message_time_iso}"
             )
             self.history.append_message(
                 user_id=user_id,
@@ -614,8 +629,14 @@ class LLMRouter:
             )
 
         max_message_id = max((msg.get("id") or 0 for msg in unread_messages), default=0)
+        print(
+            f"🧮 Обчислено max_message_id={max_message_id} для позначення прочитаного у chat_id={chat_id}"
+        )
         if max_message_id:
             await self.telegram.mark_messages_read(chat_id, max_message_id)
+        else:
+            print("⚠️ max_message_id не визначено, позначення прочитаного пропущено.")
+
         print(
             f"📥 Додано {len(unread_messages)} непрочитаних повідомлень у історію для користувача {user_id}."
         )
