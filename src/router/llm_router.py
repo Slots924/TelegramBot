@@ -184,6 +184,32 @@ class LLMRouter:
             Тип повідомлення ("voice").
         """
 
+        prepared_text, prepared_media_meta = await self._prepare_voice_content(
+            chat_id=chat_id,
+            media_meta=media_meta,
+            message_id=message_id,
+        )
+
+        self._register_inbox_message(
+            user_id=user_id,
+            chat_id=chat_id,
+            content=prepared_text,
+            msg_type=msg_type,
+            media_meta=prepared_media_meta,
+            message_time=message_time,
+            message_id=message_id,
+        )
+
+    async def _prepare_voice_content(
+        self, chat_id: int, media_meta: dict | None, message_id: int | None
+    ) -> tuple[str, dict]:
+        """Повертає текст і метадані voice після спроби розшифрування.
+
+        Використовується як для онлайн-обробки (коли приходить новий voice),
+        так і під час ручної синхронізації непрочитаних повідомлень, щоб
+        транскрипція завжди потрапляла у історію.
+        """
+
         duration_seconds = (media_meta or {}).get("duration")
         duration_label = duration_seconds if duration_seconds is not None else "unknown"
 
@@ -242,15 +268,7 @@ class LLMRouter:
                 f"⚠️ Не вдалося завантажити голосове повідомлення message_id={message_id} у чаті {chat_id}."
             )
 
-        self._register_inbox_message(
-            user_id=user_id,
-            chat_id=chat_id,
-            content=prepared_text,
-            msg_type=msg_type,
-            media_meta=safe_media_meta,
-            message_time=message_time,
-            message_id=message_id,
-        )
+        return prepared_text, safe_media_meta
 
     async def _handle_audio_message(
         self,
@@ -623,6 +641,17 @@ class LLMRouter:
                 if isinstance(message_date, datetime)
                 else datetime.now(timezone.utc).isoformat()
             )
+
+            if msg_type == "voice":
+                # Під час синхронізації готуємо транскрипцію так само, як у живому режимі.
+                prepared_text, prepared_meta = await self._prepare_voice_content(
+                    chat_id=chat_id,
+                    media_meta=media_meta,
+                    message_id=message_id,
+                )
+                content = prepared_text
+                media_meta = prepared_meta
+
             self.history.append_message(
                 user_id=user_id,
                 role="user",
