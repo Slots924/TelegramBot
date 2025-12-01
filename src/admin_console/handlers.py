@@ -129,7 +129,12 @@ async def handle_append_system_prompt(
 
 
 async def handle_list_dialogs(cmd: ListDialogsCommand) -> None:
-    """Виводить таблицю з усіма діалогами, що є у файловій системі."""
+    """
+    Виводить таблицю з усіма діалогами, що є у файловій системі.
+
+    Оновлення: показуємо останній номер чанка і час останньої зміни в папці
+    користувача. Форматуємо все у вирівняну таблицю, щоб зручно читалось.
+    """
 
     user_dirs = [
         name
@@ -140,35 +145,137 @@ async def handle_list_dialogs(cmd: ListDialogsCommand) -> None:
         print("ℹ️ Діалогів поки немає.")
         return
 
-    print("user_id | username | first_name | last_name")
+    # Збираємо всі дані наперед, щоб порахувати максимальну ширину колонок.
+    rows: list[dict[str, str]] = []
     for folder in sorted(user_dirs):
-        try:
-            user_id = int(folder.replace("user_", ""))
-        except ValueError:
+        user_id = _extract_user_id(folder)
+        if user_id is None:
             continue
-        user_info_path = os.path.join(HISTORY_BASE_DIR, folder, USER_INFO_FILENAME)
-        username = None
-        first_name = None
-        last_name = None
 
-        if os.path.exists(user_info_path):
+        user_dir = os.path.join(HISTORY_BASE_DIR, folder)
+        user_info_path = os.path.join(user_dir, USER_INFO_FILENAME)
+        user_info = _load_user_info(user_info_path)
+
+        last_chunk = _get_last_chunk_index(user_dir)
+        last_update = _get_last_update_time(user_dir)
+
+        rows.append(
+            {
+                "user_id": str(user_id),
+                "username": user_info.get("username") or "Null",
+                "first_name": user_info.get("first_name") or "Null",
+                "last_name": user_info.get("last_name") or "Null",
+                "last_chunk": last_chunk,
+                "last_update": last_update,
+            }
+        )
+
+    # Рахуємо ширини колонок (беремо максимум між заголовком та значеннями).
+    headers = {
+        "user_id": "user_id",
+        "username": "username",
+        "first_name": "first_name",
+        "last_name": "last_name",
+        "last_chunk": "last_chunk",
+        "last_update": "last_update",
+    }
+    column_widths = {
+        key: max(len(headers[key]), *(len(row[key]) for row in rows)) for key in headers
+    }
+
+    def format_row(row_values: dict[str, str]) -> str:
+        """Форматує один рядок таблиці, вирівнюючи значення по ширинам колонок."""
+
+        return " | ".join(
+            row_values[col].ljust(column_widths[col])
+            for col in [
+                "user_id",
+                "username",
+                "first_name",
+                "last_name",
+                "last_chunk",
+                "last_update",
+            ]
+        )
+
+    print(format_row(headers))
+    for row in rows:
+        print(format_row(row))
+
+
+def _extract_user_id(folder_name: str) -> int | None:
+    """Дістає user_id з назви папки виду user_<id>. Повертає None, якщо формат невалідний."""
+
+    try:
+        return int(folder_name.replace("user_", ""))
+    except ValueError:
+        return None
+
+
+def _load_user_info(user_info_path: str) -> dict[str, str | None]:
+    """Зчитує USER_INFO з файлу, якщо він існує. Повертає словник з ключами username/first_name/last_name."""
+
+    if not os.path.exists(user_info_path):
+        return {}
+
+    try:
+        with open(user_info_path, "r", encoding="utf-8") as file:
+            raw = file.read()
+        if "USER_INFO =" not in raw:
+            return {}
+
+        json_block = raw.split("USER_INFO =", 1)[1]
+        json_block = json_block.split("USER_INFO_BLOCK_END", 1)[0].strip()
+        data = json.loads(json_block)
+        return {
+            "username": data.get("username"),
+            "first_name": data.get("first_name"),
+            "last_name": data.get("last_name"),
+        }
+    except Exception as exc:
+        # Не валимо команду, просто повідомляємо про проблему.
+        print(f"⚠️ Не вдалося прочитати user_info за шляхом {user_info_path}: {exc}")
+        return {}
+
+
+def _get_last_chunk_index(user_dir: str) -> str:
+    """Повертає номер останнього чанка користувача або 'тгдд', якщо чанків немає."""
+
+    chunk_files = [
+        name
+        for name in os.listdir(user_dir)
+        if name.startswith("chunk_") and name.endswith(".json")
+    ]
+    if not chunk_files:
+        return "тгдд"
+
+    chunk_files.sort()
+    last_name = chunk_files[-1]
+
+    try:
+        return str(int(last_name.replace("chunk_", "").replace(".json", "")))
+    except ValueError:
+        # Якщо назва битa, показуємо її як є, щоб було видно проблему.
+        return last_name
+
+
+def _get_last_update_time(user_dir: str) -> str:
+    """Визначає час останньої зміни в папці користувача у форматі HH:MM DD.MM.YYYY."""
+
+    latest_ts = os.path.getmtime(user_dir)
+
+    # Обходимо всі файли в папці користувача, щоб знайти найсвіжішу зміну.
+    for root, _, files in os.walk(user_dir):
+        for filename in files:
+            file_path = os.path.join(root, filename)
             try:
-                with open(user_info_path, "r", encoding="utf-8") as file:
-                    raw = file.read()
-                if "USER_INFO =" in raw:
-                    json_block = raw.split("USER_INFO =", 1)[1]
-                    json_block = json_block.split("USER_INFO_BLOCK_END", 1)[0].strip()
-                    data = json.loads(json_block)
-                    username = data.get("username")
-                    first_name = data.get("first_name")
-                    last_name = data.get("last_name")
-            except Exception as exc:
-                print(f"⚠️ Не вдалося прочитати user_info для {user_id}: {exc}")
+                latest_ts = max(latest_ts, os.path.getmtime(file_path))
+            except FileNotFoundError:
+                # Файл могли видалити між os.walk і getmtime — пропускаємо.
+                continue
 
-        username_value = username if username else "Null"
-        first_value = first_name if first_name else "Null"
-        last_value = last_name if last_name else "Null"
-        print(f"{user_id} | {username_value} | {first_value} | {last_value}")
+    last_update_dt = datetime.fromtimestamp(latest_ts)
+    return last_update_dt.strftime("%H:%M %d.%m.%Y")
 
 
 async def handle_show_history(

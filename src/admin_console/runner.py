@@ -44,7 +44,7 @@ def _print_help() -> None:
 Доступні команди:
   send <user_id|@username> [текст]   — відправити повідомлення або запустити LLM без тексту
   append_sys <target> <текст>         — додати системний промпт у кінець історії
-  list_dialogs                        — показати всі діалоги (user_id | username | first_name | last_name)
+  list_dialogs                        — показати всі діалоги (user_id | username | first_name | last_name | last_chunk | last_update)
   show_history <target> [limit]       — показати останні N повідомлень (дефолт 10)
   prune_history <target> [keep]       — залишити лише N останніх чанків (дефолт 5)
   delete_dialog <target>              — повністю видалити діалог
