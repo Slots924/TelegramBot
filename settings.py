@@ -24,7 +24,7 @@ HISTORY_BASE_DIR = os.path.join(DATA_DIR, "dialogs")
 HISTORY_MAX_MESSAGES_PER_CHUNK = 20
 
 # Скільки останніх чанків завантажувати в контекст
-HISTORY_MAX_CHUNKS_FOR_CONTEXT = 5
+HISTORY_MAX_CHUNKS_FOR_CONTEXT = 10
 
 # Ім'я файлу з інформацією про користувача
 USER_INFO_FILENAME = "user_info.txt"
