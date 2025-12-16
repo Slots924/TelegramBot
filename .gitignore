@@ -26,5 +26,8 @@ env/
 # історія діалогів LLM
 data/dialogs/
 
+#Тимчасові файли аудіо
+data/audio_tmp/
+
 # Google STT credentials
 credentials/speech_to_text_credential.json
