@@ -16,12 +16,18 @@ def _run_ffmpeg(arguments: list[str]) -> None:
     :param arguments: повний список аргументів для виклику ffmpeg.
     """
 
+    print("🎬 Запускаємо ffmpeg з аргументами:", " ".join(arguments))
     process = subprocess.run(
         ["ffmpeg", *arguments],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
+
+    print("📄 ffmpeg STDOUT:")
+    print(process.stdout)
+    print("⚠️ ffmpeg STDERR:")
+    print(process.stderr)
 
     if process.returncode != 0:
         error_message = (
@@ -46,9 +52,19 @@ def save_temp_copy(audio_input: bytes | str) -> str:
         # Якщо прийшли байти, просто записуємо їх у файл
         with open(temp_path, "wb") as file:
             file.write(audio_input)
+        print(
+            "💾 Збережено сирі байти у тимчасовий файл",
+            temp_path,
+            f"(розмір={len(audio_input)} байт)",
+        )
     else:
         # Якщо прийшов шлях, копіюємо його у тимчасове місце, щоб можна було легко прибрати
         shutil.copy(audio_input, temp_path)
+        print(
+            "📂 Скопійовано аудіо у тимчасовий файл",
+            temp_path,
+            f"з джерела={audio_input}",
+        )
 
     return temp_path
 
@@ -66,6 +82,14 @@ def trim_audio(file_path: str, duration_seconds: float) -> str:
     trimmed_path = os.path.join(STT_TMP_DIR, f"trimmed_{uuid.uuid4().hex}.ogg")
 
     # -t задає тривалість вихідного файлу у секундах
+    print(
+        "✂️ Обрізаємо аудіо",
+        f"вхідний файл={file_path}",
+        f"оголошена тривалість={duration_seconds}s",
+        f"безпечна тривалість={safe_duration}s",
+        f"вихідний файл={trimmed_path}",
+    )
+
     _run_ffmpeg([
         "-y",  # перезаписати, якщо файл існує
         "-i",
@@ -92,6 +116,9 @@ def cleanup_temp_files(paths: Iterable[str]) -> None:
             continue
         if os.path.exists(path):
             os.remove(path)
+            print(f"🗑️ Видалено тимчасовий файл {path}")
+        else:
+            print(f"ℹ️ Тимчасовий файл вже відсутній або не існує: {path}")
 
 
 def prepare_audio_bytes(audio_input: bytes | str, duration_seconds: float) -> tuple[bytes, list[str]]:
@@ -116,5 +143,12 @@ def prepare_audio_bytes(audio_input: bytes | str, duration_seconds: float) -> tu
     # 3. Читаємо байти готового OGG-файлу без додаткової конвертації
     with open(trimmed_path, "rb") as file:
         audio_bytes = file.read()
+
+    print(
+        "📦 Підготовка аудіо завершена",
+        f"raw_file={temp_raw_path}",
+        f"trimmed_file={trimmed_path}",
+        f"фінальний розмір={len(audio_bytes)} байт",
+    )
 
     return audio_bytes, temp_files

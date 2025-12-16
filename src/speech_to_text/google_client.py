@@ -47,6 +47,12 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
 
     audio = speech.RecognitionAudio(content=audio_bytes)
 
+    print(
+        "📨 Готуємо запит до Google STT:",
+        f"довжина байтів={len(audio_bytes)}",
+        f"перші_32_байти={audio_bytes[:32]!r}",
+    )
+
     print("=== STT НАЛАШТУВАННЯ ===")
     print("Encoding: OGG_OPUS")
     print("sample_rate_hertz: 48000")
@@ -54,6 +60,7 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
     print(f"Альтернативні: {_recognition_config.alternative_language_codes}\n")
 
     response = _speech_client.recognize(config=_recognition_config, audio=audio)
+    print("✅ Запит до Google STT виконано, парсимо відповідь")
 
     # Відображаємо сирий JSON у консоль, щоб легше діагностувати помилки
     try:

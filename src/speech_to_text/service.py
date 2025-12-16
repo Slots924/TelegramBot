@@ -16,6 +16,7 @@ def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> Speec
 
     # Якщо розпізнавання вимкнено, повертаємо пустий результат
     if not STT_ENABLED:
+        print("⚙️ STT вимкнено через конфіг, повертаємо порожній результат")
         return SpeechResult(text=None, language=None, confidence=None, raw_response=None)
 
     temp_files: list[str] = []
@@ -25,6 +26,12 @@ def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> Speec
     # дозволену тривалість, щоб не обрізати файл у «0 секунд» та не псувати аудіо.
     declared_duration = float(duration_seconds) if duration_seconds else float(STT_MAX_SECONDS)
     safe_duration = min(declared_duration, float(STT_MAX_SECONDS))
+    print(
+        "⌛️ Отримано голосове повідомлення",
+        f"len={len(audio_bytes)} байт,",
+        f"declared_duration={declared_duration}s,",
+        f"safe_duration={safe_duration}s",
+    )
 
     try:
         # Готуємо аудіо: зберегти → за потреби обрізати → відправити як OGG/OPUS
@@ -33,10 +40,23 @@ def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> Speec
             duration_seconds=safe_duration,
         )
 
+        print(
+            "✅ Аудіо підготовлено до STT",
+            f"готовий розмір={len(prepared_bytes)} байт",
+            f"тимчасові файли={temp_files}",
+        )
+
         # Відправляємо у Google STT
         result = transcribe_bytes(prepared_bytes)
+        print(
+            "🤖 Результат STT",
+            f"text={result.text!r}",
+            f"language={result.language}",
+            f"confidence={result.confidence}",
+        )
         return result
     finally:
         # Після успішного виклику обов'язково прибираємо тимчасові файли
+        print(f"🧹 Видаляємо тимчасові файли після STT: {temp_files}")
         audio_utils.cleanup_temp_files(temp_files)
 
