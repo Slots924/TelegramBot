@@ -37,9 +37,9 @@ _recognition_config = speech.RecognitionConfig(
 )
 
 
-def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
+def transcribe_bytes_detailed(audio_bytes: bytes) -> SpeechResult:
     """
-    Відправляє байти аудіо у Google Speech-to-Text і повертає результат.
+    Відправляє байти аудіо у Google Speech-to-Text і повертає розширений результат.
 
     :param audio_bytes: підготовлений файл OGG/OPUS (наприклад, з Telegram voice/round video).
     :return: SpeechResult з текстом, мовою, впевненістю та сирою відповіддю.
@@ -80,3 +80,17 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
         confidence=best_alternative.confidence if best_alternative.confidence else None,
         raw_response=response,
     )
+
+
+def transcribe_bytes(audio_bytes: bytes) -> str:
+    """
+    Спрощена функція: приймає байти аудіо та повертає лише розпізнаний текст.
+
+    :param audio_bytes: підготовлений файл OGG/OPUS у байтах.
+    :return: рядок з транскрипцією або порожній рядок, якщо сервіс нічого не повернув.
+    """
+
+    detailed_result = transcribe_bytes_detailed(audio_bytes)
+
+    # Якщо розпізнавання не дало результатів, повертаємо порожній рядок замість None
+    return detailed_result.text or ""

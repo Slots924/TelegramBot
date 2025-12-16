@@ -2,7 +2,7 @@
 
 from . import audio_utils
 from .config import STT_ENABLED, STT_MAX_SECONDS
-from .google_client import SpeechResult, transcribe_bytes
+from .google_client import SpeechResult, transcribe_bytes_detailed
 
 
 def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> SpeechResult:
@@ -33,8 +33,8 @@ def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> Speec
             duration_seconds=safe_duration,
         )
 
-        # Відправляємо у Google STT
-        result = transcribe_bytes(prepared_bytes)
+        # Відправляємо у Google STT і повертаємо розширений результат
+        result = transcribe_bytes_detailed(prepared_bytes)
         return result
     finally:
         # Після успішного виклику обов'язково прибираємо тимчасові файли
