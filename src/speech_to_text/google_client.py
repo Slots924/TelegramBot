@@ -59,8 +59,21 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
     print(f"Основна мова: {_recognition_config.language_code}")
     print(f"Альтернативні: {_recognition_config.alternative_language_codes}\n")
 
-    response = _speech_client.recognize(config=_recognition_config, audio=audio)
-    print("✅ Запит до Google STT виконано, парсимо відповідь")
+    print("🚀 Відправляємо запит до Google STT через recognize()")
+    try:
+        response = _speech_client.recognize(config=_recognition_config, audio=audio)
+    except Exception as exc:
+        # Логуємо повну помилку, щоб розуміти, що саме відповів SDK/Google
+        print("❌ Помилка під час виклику Google STT:", exc)
+        raise
+
+    print("✅ Запит до Google STT виконано, отримуємо відповідь")
+    print(
+        "ℹ️ Коротка інформація по відповіді:",
+        f"тип={type(response)}",
+        f"results_count={len(response.results)}",
+        f"raw_size_approx={len(response.SerializeToString())} байт",
+    )
 
     # Відображаємо сирий JSON у консоль, щоб легше діагностувати помилки
     try:
@@ -72,14 +85,34 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
         print(f"⚠️ Не вдалося розпарсити відповідь STT у JSON: {exc}")
 
     if not response.results:
+        print("⚠️ Google STT повернув порожній список results")
         return SpeechResult(text=None, language=None, confidence=None, raw_response=response)
 
     first_result = response.results[0]
     if not first_result.alternatives:
+        print("⚠️ У першому result немає alternatives, не вдалося отримати текст")
         return SpeechResult(text=None, language=None, confidence=None, raw_response=response)
 
     best_alternative = first_result.alternatives[0]
     language_code = first_result.language_code if hasattr(first_result, "language_code") else None
+
+    print(
+        "📊 Деталі першого результату STT:",
+        f"transcript={best_alternative.transcript!r}",
+        f"confidence={best_alternative.confidence if best_alternative.confidence else 'N/A'}",
+        f"language_code={language_code}",
+        f"alternatives_total={len(first_result.alternatives)}",
+    )
+
+    # Якщо є кілька альтернатив, логувати їх усі для дебагу
+    if len(first_result.alternatives) > 1:
+        print("=== Усі альтернативи Google STT ===")
+        for index, alternative in enumerate(first_result.alternatives):
+            print(
+                f"#{index}: transcript={alternative.transcript!r} |",
+                f"confidence={alternative.confidence if alternative.confidence else 'N/A'}",
+            )
+        print("=== Кінець списку альтернатив ===")
 
     return SpeechResult(
         text=best_alternative.transcript,

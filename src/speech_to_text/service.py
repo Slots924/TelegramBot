@@ -46,8 +46,14 @@ def transcribe_voice(audio_bytes: bytes, duration_seconds: float | int) -> Speec
             f"тимчасові файли={temp_files}",
         )
 
-        # Відправляємо у Google STT
-        result = transcribe_bytes(prepared_bytes)
+        # Відправляємо у Google STT та логуємо кожен етап
+        print("🛰️ Стартуємо виклик Google STT через transcribe_bytes()")
+        try:
+            result = transcribe_bytes(prepared_bytes)
+        except Exception as exc:
+            # Додаємо явний лог перед повторним винесенням помилки
+            print("💥 Помилка всередині transcribe_bytes під час звернення до Google STT:", exc)
+            raise
         print(
             "🤖 Результат STT",
             f"text={result.text!r}",
