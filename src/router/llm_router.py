@@ -603,26 +603,24 @@ class LLMRouter:
 
         try:
             last_user_message_id = self.history.get_last_user_message_id(user_id)
+            last_assistant_message_id = self.history.get_last_assistant_message_id(user_id)
         except Exception as exc:
             print(
-                f"⚠️ Не вдалося отримати last_user_message_id з історії для {user_id}: {exc}"
+                f"⚠️ Не вдалося отримати останні message_id з історії для {user_id}: {exc}"
             )
             last_user_message_id = 0
+            last_assistant_message_id = 0
 
-        if last_user_message_id:
-            print(
-                f"ℹ️ Останній збережений message_id користувача: {last_user_message_id}."
-                " Підтягуємо все, що прийшло після нього."
-            )
-            unread_messages = await self.telegram.fetch_messages_after(
-                chat_id, last_message_id=last_user_message_id
-            )
-        else:
-            print(
-                "ℹ️ last_user_message_id відсутній або дорівнює 0. "
-                "Схоже, історія ще не збережена — беремо 20 останніх вхідних повідомлень."
-            )
-            unread_messages = await self.telegram.fetch_recent_incoming_messages(chat_id, limit=20)
+        anchor_message_id = max(last_user_message_id, last_assistant_message_id)
+
+        print(
+            "ℹ️ Поточні межі синхронізації: "
+            f"user={last_user_message_id} | assistant={last_assistant_message_id} | anchor={anchor_message_id}."
+        )
+
+        unread_messages = await self.telegram.fetch_dialog_messages_after(
+            chat_id, last_message_id=anchor_message_id, limit=50
+        )
 
         if not unread_messages:
             print(
@@ -636,13 +634,14 @@ class LLMRouter:
             media_meta = message.get("media_meta") or {}
             message_id = message.get("id")
             message_date = message.get("date")
+            is_outgoing = bool(message.get("out"))
             message_time_iso = (
                 message_date.astimezone(timezone.utc).isoformat()
                 if isinstance(message_date, datetime)
                 else datetime.now(timezone.utc).isoformat()
             )
 
-            if msg_type == "voice":
+            if msg_type == "voice" and not is_outgoing:
                 # Під час синхронізації готуємо транскрипцію так само, як у живому режимі.
                 prepared_text, prepared_meta = await self._prepare_voice_content(
                     chat_id=chat_id,
@@ -652,16 +651,18 @@ class LLMRouter:
                 content = prepared_text
                 media_meta = prepared_meta
 
+            role = "assistant" if is_outgoing else "user"
+
             self.history.append_message(
                 user_id=user_id,
-                role="user",
+                role=role,
                 content=content,
                 message_time_iso=message_time_iso,
                 message_id=message_id,
             )
             print(
                 "📌 Додано повідомлення з sync_unread: "
-                f"type={msg_type} | id={message_id} | text={content}"
+                f"role={role} | type={msg_type} | id={message_id} | text={content}"
             )
 
         max_message_id = max((msg.get("id") or 0 for msg in unread_messages), default=0)

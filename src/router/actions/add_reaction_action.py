@@ -43,11 +43,13 @@ async def handle_add_reaction(
 
     # Фіксуємо у історії, що асистент поставив реакцію на повідомлення користувача,
     # уніфіковуючи формат запису для подальшого використання LLM.
+    last_assistant_message_id = history.get_last_assistant_message_id(user_id)
     history.append_message(
         user_id=user_id,
         role="assistant",
         content=f"[REACTION] '{emoji}' on message_id = {target_message_id}",
         message_time_iso=datetime.now(timezone.utc).isoformat(),
-        # Зберігаємо ID цільового повідомлення, щоб контекст містив потрібну прив'язку.
-        message_id=target_message_id,
+        # Використовуємо message_id останнього повідомлення асистента, щоб у контексті
+        # був прив'язаний саме ботівський запис, а не користувацький target_message_id.
+        message_id=last_assistant_message_id,
     )

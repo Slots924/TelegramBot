@@ -26,9 +26,18 @@ from .config import (
 class HistoryManager:
     """Керує історією діалогів користувачів, зберігаючи її в JSON-файлах."""
 
-    def __init__(self):
-        # Переконуємось, що базова директорія існує
-        os.makedirs(HISTORY_BASE_DIR, exist_ok=True)
+    def __init__(self, base_dir: str | None = None):
+        """Створює менеджер історії з переданою базовою директорією.
+
+        Parameters
+        ----------
+        base_dir: str | None
+            Кастомний шлях до базової директорії з історіями. Якщо не передано —
+            використовується глобальне значення з налаштувань (HISTORY_BASE_DIR).
+        """
+
+        # Зберігаємо окремо, щоб у тестах можна було підмінити шлях.
+        self.base_dir = base_dir or HISTORY_BASE_DIR
 
     # =====================
     # Внутрішні допоміжні
@@ -39,7 +48,7 @@ class HistoryManager:
         Повертає шлях до папки користувача.
         Створює її, якщо ще не існує.
         """
-        user_dir = os.path.join(HISTORY_BASE_DIR, f"user_{user_id}")
+        user_dir = os.path.join(self.base_dir, f"user_{user_id}")
         os.makedirs(user_dir, exist_ok=True)
         return user_dir
 
@@ -150,7 +159,10 @@ class HistoryManager:
             if chunk_data.get("messages") is None:
                 chunk_data["messages"] = []
 
-        # Якщо поточний чанк заповнений — створюємо новий
+        # Якщо поточний чанк заповнений — створюємо новий, але переносимо
+        # останні message_id з метаданих попереднього чанка, щоб вони були
+        # доступні одразу після створення.
+        previous_user_id, previous_assistant_id = self._get_meta_last_ids(chunk_data)
         if len(chunk_data["messages"]) >= HISTORY_MAX_MESSAGES_PER_CHUNK:
             chunk_path = self._create_new_chunk_path(user_id)
             chunk_index = int(os.path.basename(chunk_path).replace("chunk_", "").replace(".json", ""))
@@ -158,7 +170,10 @@ class HistoryManager:
                 "user_id": user_id,
                 "chunk_index": chunk_index,
                 "messages": [],
-                "meta": self._build_default_meta(),
+                "meta": self._build_default_meta(
+                    last_user_message_id=previous_user_id,
+                    last_assistant_message_id=previous_assistant_id,
+                ),
             }
 
         # Додаємо нове повідомлення
@@ -170,6 +185,8 @@ class HistoryManager:
             "message_id": message_id,
         }
         chunk_data["messages"].append(message)
+
+        # Оновлюємо метадані лише після нового запису, щоб зафіксувати останні message_id.
         self._ensure_meta(chunk_data)
         chunk_data["meta"]["updated_at"] = self._now_iso()
 
@@ -204,19 +221,54 @@ class HistoryManager:
         Якщо чанків немає або у них відсутні коректні дані — повертає 0.
         Метод потрібен для синхронізації історії з Telegram.
         """
+        return self.get_last_message_id(user_id=user_id, role="user")
 
-        last_chunk_path = self._get_last_chunk_path(user_id)
-        if last_chunk_path is None:
-            return 0
+    def get_last_assistant_message_id(self, user_id: int) -> int:
+        """Повертає message_id останнього повідомлення асистента з історії.
+
+        Усі помилки/відсутність даних інтерпретуються як 0, щоб не зламати
+        сценарії синхронізації.
+        """
+
+        return self.get_last_message_id(user_id=user_id, role="assistant")
+
+    def get_last_message_id(self, user_id: int, role: str) -> int:
+        """Шукає останній message_id за вказаною роллю у всіх чанках користувача.
+
+        Значення читаються виключно з поля meta кожного чанка. Якщо історія
+        відсутня або дані пошкоджені, повертається 0.
+        """
 
         try:
-            chunk_data = self._load_chunk(last_chunk_path)
-            self._ensure_meta(chunk_data)
-            last_user_id = chunk_data.get("meta", {}).get("last_user_message_id")
-            return int(last_user_id) if last_user_id else 0
+            chunks = self._list_user_chunks(user_id)
         except Exception:
-            # Якщо трапилась будь-яка проблема — повертаємо 0, щоб вище рівні могли зробити fallback.
             return 0
+
+        if not chunks:
+            return 0
+
+        if role == "user":
+            meta_key = "last_user_message_id"
+        elif role == "assistant":
+            meta_key = "last_assistant_message_id"
+        else:
+            # Невідома роль не підтримується — повертаємо 0, щоб не зламати логіку синхронізації.
+            return 0
+
+        # Перебираємо чанки з кінця, щоб знайти найновіший запис у метаданих.
+        for chunk_path in reversed(chunks):
+            try:
+                chunk_data = self._load_chunk(chunk_path)
+            except Exception:
+                # Якщо чанк не читається — пропускаємо його.
+                continue
+
+            meta_value = self._safe_int(chunk_data.get("meta", {}).get(meta_key))
+            if meta_value:
+                return meta_value
+
+        # Нічого не знайшли — повертаємо 0.
+        return 0
 
     def refresh_all_chunk_meta(self) -> Tuple[int, int]:
         """Перебудовує метадані для всіх існуючих чанків у файловій системі.
@@ -227,7 +279,7 @@ class HistoryManager:
         updated = 0
         total = 0
 
-        for root, _, files in os.walk(HISTORY_BASE_DIR):
+        for root, _, files in os.walk(self.base_dir):
             for filename in files:
                 if not filename.startswith("chunk_") or not filename.endswith(".json"):
                     continue
@@ -275,14 +327,18 @@ class HistoryManager:
         except Exception:
             return HistoryManager._now_iso()
 
-    def _build_default_meta(self) -> Dict[str, Any]:
-        """Створює базову структуру meta з усіма необхідними полями."""
+    def _build_default_meta(
+        self,
+        last_user_message_id: int | None = None,
+        last_assistant_message_id: int | None = None,
+    ) -> Dict[str, Any]:
+        """Створює базову структуру meta з урахуванням останніх message_id."""
 
         return {
             "created_at": self._now_iso(),
             "updated_at": self._now_iso(),
-            "last_user_message_id": None,
-            "last_assistant_message_id": None,
+            "last_user_message_id": last_user_message_id,
+            "last_assistant_message_id": last_assistant_message_id,
         }
 
     def _ensure_meta(self, chunk_data: Dict[str, Any]) -> None:
@@ -298,23 +354,26 @@ class HistoryManager:
         meta["created_at"] = self._normalize_created_at(meta_created)
         meta["updated_at"] = self._normalize_created_at(meta_updated)
 
-        # Рахуємо останні message_id для кожної ролі.
-        last_user_id, last_assistant_id = self._calculate_last_message_ids(messages)
-        meta["last_user_message_id"] = last_user_id
-        meta["last_assistant_message_id"] = last_assistant_id
+        # Рахуємо останні message_id для кожної ролі та враховуємо вже наявні
+        # значення в метаданих, щоб не загубити їх під час створення нового чанка.
+        existing_user_id, existing_assistant_id = self._get_meta_last_ids(chunk_data)
+        calculated_user_id, calculated_assistant_id = self._calculate_last_message_ids(messages)
+
+        meta["last_user_message_id"] = max(existing_user_id, calculated_user_id)
+        meta["last_assistant_message_id"] = max(existing_assistant_id, calculated_assistant_id)
 
         chunk_data["meta"] = meta
 
     def _calculate_last_message_ids(self, messages: List[Dict[str, Any]]) -> Tuple[int | None, int | None]:
         """Шукає останні message_id для ролей user та assistant серед переданих повідомлень."""
 
-        last_user_id = None
-        last_assistant_id = None
+        last_user_id = 0
+        last_assistant_id = 0
 
         for message in messages:
             role = message.get("role")
-            msg_id = message.get("message_id")
-            if msg_id is None:
+            msg_id = self._safe_int(message.get("message_id"))
+            if msg_id <= 0:
                 continue
 
             if role == "user":
@@ -323,6 +382,23 @@ class HistoryManager:
                 last_assistant_id = msg_id
 
         return last_user_id, last_assistant_id
+
+    def _get_meta_last_ids(self, chunk_data: Dict[str, Any]) -> Tuple[int, int]:
+        """Повертає останні message_id з метаданих, гарантуючи безпечне перетворення."""
+
+        meta = chunk_data.get("meta") or {}
+        last_user_id = self._safe_int(meta.get("last_user_message_id"))
+        last_assistant_id = self._safe_int(meta.get("last_assistant_message_id"))
+
+        return last_user_id, last_assistant_id
+
+    def _safe_int(self, value: Any) -> int:
+        """Безпечно перетворює значення на int, повертаючи 0 у разі невдачі."""
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
 
     def _extract_first_timestamp(self, messages: List[Dict[str, Any]]) -> str:
         """Знаходить найстарішу дату серед повідомлень або повертає поточний час."""
