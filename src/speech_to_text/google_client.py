@@ -68,22 +68,6 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
         raise
 
     print("✅ Запит до Google STT виконано, отримуємо відповідь")
-    print(
-        "ℹ️ Коротка інформація по відповіді:",
-        f"тип={type(response)}",
-        f"results_count={len(response.results)}",
-        f"raw_size_approx={len(response.SerializeToString())} байт",
-    )
-
-    # Відображаємо сирий JSON у консоль, щоб легше діагностувати помилки
-    try:
-        raw_json = MessageToJson(response)
-        print("=== RAW STT RESPONSE ===")
-        print(raw_json)
-        print("=== END RAW STT RESPONSE ===\n")
-    except Exception as exc:
-        print(f"⚠️ Не вдалося розпарсити відповідь STT у JSON: {exc}")
-
     if not response.results:
         print("⚠️ Google STT повернув порожній список results")
         return SpeechResult(text=None, language=None, confidence=None, raw_response=response)
@@ -113,6 +97,22 @@ def transcribe_bytes(audio_bytes: bytes) -> SpeechResult:
                 f"confidence={alternative.confidence if alternative.confidence else 'N/A'}",
             )
         print("=== Кінець списку альтернатив ===")
+
+    print(
+        "ℹ️ Коротка інформація по відповіді:",
+        f"тип={type(response)}",
+        f"results_count={len(response.results)}",
+        f"перший_transcript={best_alternative.transcript!r}",
+    )
+
+    # Відображаємо сирий JSON у консоль, щоб легше діагностувати помилки
+    try:
+        raw_json = MessageToJson(response)
+        print("=== RAW STT RESPONSE ===")
+        print(raw_json)
+        print("=== END RAW STT RESPONSE ===\n")
+    except Exception as exc:
+        print(f"⚠️ Не вдалося розпарсити відповідь STT у JSON: {exc}")
 
     return SpeechResult(
         text=best_alternative.transcript,
