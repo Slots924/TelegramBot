@@ -221,6 +221,38 @@ class TelegramAPI:
 
         return collected
 
+    async def fetch_dialog_messages_after(
+        self, chat_id: int | str, last_message_id: int, limit: int = 50
+    ) -> list[dict]:
+        """Повертає як вхідні, так і вихідні повідомлення після last_message_id.
+
+        Потрібно для синхронізації історії, коли потрібно підтягнути пропущені
+        меседжі обох ролей. Обмежуємо результат максимально `limit` елементами,
+        щоб не перевантажувати диск і пам'ять.
+        """
+
+        collected: list[dict] = []
+
+        async for message in self.client.iter_messages(chat_id, min_id=last_message_id):
+            msg_type, prepared_content, media_meta = self._detect_message_type(message)
+            collected.append(
+                {
+                    "id": getattr(message, "id", None),
+                    "text": prepared_content,
+                    "date": getattr(message, "date", None) or datetime.now(timezone.utc),
+                    "msg_type": msg_type,
+                    "media_meta": media_meta,
+                    "out": getattr(message, "out", False),
+                }
+            )
+
+        collected.sort(key=lambda item: item.get("id") or 0)
+
+        if len(collected) > limit:
+            collected = collected[-limit:]
+
+        return collected
+
     async def fetch_recent_incoming_messages(
         self, chat_id: int | str, limit: int = 20
     ) -> list[dict]:
