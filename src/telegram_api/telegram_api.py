@@ -103,6 +103,13 @@ class TelegramAPI:
         try:
             # Отримуємо саме те повідомлення, яке містить голосове медіа.
             message = await self.client.get_messages(chat_id, ids=message_id)
+            print(
+                "📨 Отримано повідомлення для voice",
+                f"chat_id={chat_id}",
+                f"message_id={message_id}",
+                f"file_id={file_id}",
+                f"payload_type={type(message)}",
+            )
         except Exception as exc:
             print(
                 f"⚠️ Не вдалося отримати повідомлення {message_id} для завантаження voice: {exc}"
@@ -122,15 +129,27 @@ class TelegramAPI:
         try:
             # Використовуємо file=bytes, щоб одразу отримати байтовий вміст без збереження на диск.
             raw_bytes = await self.client.download_media(message, file=bytes)
+            print(
+                "⬇️ Спроба завантажити voice",
+                f"chat_id={chat_id}",
+                f"message_id={message_id}",
+                f"file_id={file_id}",
+            )
 
             # Telethon може повернути шлях до файлу, тому підстрахуємося і дочитаємо байти вручну.
             if isinstance(raw_bytes, str):
+                raw_path = raw_bytes
                 try:
-                    with open(raw_bytes, "rb") as file:
+                    with open(raw_path, "rb") as file:
                         raw_bytes = file.read()
+                    print(
+                        "📖 Дочитали voice з файлу",
+                        f"path={raw_path}",
+                        f"size={len(raw_bytes) if isinstance(raw_bytes, (bytes, bytearray)) else 'unknown'}",
+                    )
                 except Exception as exc:
                     print(
-                        f"⚠️ Файл voice збережено у {raw_bytes}, але не вдалося прочитати: {exc}"
+                        f"⚠️ Файл voice збережено у {raw_path}, але не вдалося прочитати: {exc}"
                     )
                     return None
 
@@ -140,6 +159,11 @@ class TelegramAPI:
                 )
                 return None
 
+            print(
+                "✅ Voice успішно завантажено",
+                f"size={len(raw_bytes)} байт",
+                f"first_32_bytes={raw_bytes[:32]!r}",
+            )
             return raw_bytes
         except Exception as exc:
             print(

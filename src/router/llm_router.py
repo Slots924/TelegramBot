@@ -213,6 +213,14 @@ class LLMRouter:
         duration_seconds = (media_meta or {}).get("duration")
         duration_label = duration_seconds if duration_seconds is not None else "unknown"
 
+        print(
+            "🎤 Обробка voice",
+            f"chat_id={chat_id}",
+            f"message_id={message_id}",
+            f"duration={duration_label}",
+            f"media_meta={media_meta}",
+        )
+
         # Базовий текст на випадок помилок або відсутності транскрипції.
         prepared_text = (
             f"[VOICE_MESSAGE duration={duration_label}s transcribed=NO]\n"
