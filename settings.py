@@ -58,7 +58,7 @@ ANSWER_TO_TELEGRAM_BOTS = False
 # ──────────────────────────────────────────────────────────────
 
 # Затримка перед запуском чергового циклу (секунди)
-DEBOUNCE_SECONDS = 14
+DEBOUNCE_SECONDS = 0
 
 # Базова тривалість "набору тексту"
 TYPING_SECONDS_DEFAULT = 15.0
@@ -69,7 +69,7 @@ TYPING_SECONDS_DEFAULT = 15.0
 # ──────────────────────────────────────────────────────────────
 
 LLM_TEMPERATURE = 1
-LLM_MAX_TOKENS = 1024
+LLM_MAX_TOKENS = 2048
 LLM_TOP_P = 0.92
 
 LLM_PRESENCE_PENALTY = 0.92
