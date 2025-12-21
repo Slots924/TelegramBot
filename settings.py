@@ -58,7 +58,7 @@ ANSWER_TO_TELEGRAM_BOTS = False
 # ──────────────────────────────────────────────────────────────
 
 # Затримка перед запуском чергового циклу (секунди)
-DEBOUNCE_SECONDS = 0
+DEBOUNCE_SECONDS = 14
 
 # Базова тривалість "набору тексту"
 TYPING_SECONDS_DEFAULT = 15.0
