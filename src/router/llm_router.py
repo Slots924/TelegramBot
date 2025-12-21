@@ -751,7 +751,7 @@ class LLMRouter:
 
     @staticmethod
     def _parse_actions(answer_raw: str) -> List[dict]:
-        """Парсить відповідь LLM у список дій. Повертає send_message з текстом, якщо JSON некоректний."""
+        """Парсить відповідь LLM у список дій або повертає порожній список для невалідного JSON."""
 
         try:
             data = json.loads(answer_raw)
@@ -767,20 +767,22 @@ class LLMRouter:
                     print(f"ℹ️ Пропускаю елемент відповіді, бо він не dict: {raw_action}")
             return actions
         except Exception as exc:
-            print(f"⚠️ Не вдалося розпарсити дії LLM: {exc}. Використовую просте send_message.")
-            return [
-                {
-                    "type": "send_message",
-                    "wait_seconds": 0,
-                    "human_seconds": 0,
-                    "content": answer_raw,
-                }
-            ]
+            # Логуємо факт, що відповіді не можна розпарсити, і не відправляємо сирий текст користувачу.
+            print(
+                "⚠️ Отримано невалідний JSON від LLM, відповіді не буде надіслано: "
+                f"{exc}"
+            )
+            return []
 
     async def _execute_actions(
         self, chat_id: int, user_id: int, actions: Sequence[dict]
     ) -> None:
         """По черзі виконує екшени, які повернула LLM, враховуючи затримку wait_seconds."""
+
+        if not actions:
+            # Якщо дій немає (наприклад, LLM повернула невалідний JSON), нічого не виконуємо.
+            print("ℹ️ Список дій порожній, нема що виконувати.")
+            return
 
         for action in actions:
             action_type_raw = action.get("type")
@@ -849,5 +851,4 @@ class LLMRouter:
 
         # Для wait, fake_typing, ignore нічого додатково не потрібно.
         return {}
-
 
