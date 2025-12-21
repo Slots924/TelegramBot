@@ -10,7 +10,8 @@ Telegram-клієнт на Python (User API через Telethon), який:
 - пересилає їх у LLM (Grok 4 Fast) через HTTP API,
 - зберігає історію діалогів по користувачах,
 - формує контекст (system prompt + історія) для кожного запиту,
-- відправляє відповідь назад у Telegram.
+- очікує від LLM JSON-список дій (send_message / send_messages / fake_typing / add_reaction / wait / ignore),
+- відправляє результат назад у Telegram і логує помилки.
 
 LLM зараз: **Grok 4 Fast** (через окремий `llm_api` модуль).
 
@@ -69,9 +70,16 @@ project_root/
     │
     ├── router/                # “мозок” — зв'язує Telegram, історію та LLM
     │   ├── __init__.py
-    │   ├── llm_router.py      # клас LLMRouter: пер-юзерна логіка, стани, debounce, виклики LLM
+    │   ├── llm_router.py      # клас LLMRouter: стани, debounce, виклики LLM, парсинг JSON-дiй
+    │   ├── actions/           # окремі обробники дій (send_message, fake_typing, add_reaction тощо)
     │   ├── hendlers/          # місце під додаткові роутерні хендлери
     │   └── utils/             # допоміжні утиліти роутера
+    │
+    ├── speech_to_text/        # розпізнавання голосових повідомлень
+    │   ├── service.py         # точка входу для STT
+    │   └── google_client.py   # робота з Google Speech-to-Text
+    │
+    └── admin_console/         # CLI для адмінів (синхронізація, прокидка повідомлень)
 ```
 
 ---
@@ -95,12 +103,14 @@ project_root/
   - `async def run()`: `client.run_until_disconnected()`, постійне прослуховування.
   - `def set_router(router)`: зберегти посилання на `LLMRouter`.
   - `async def send_message(chat_id: int | str, text: str)`: відправити текст у чат (без reply).
+  - `async def send_typing(chat_id: int, duration_seconds: float)`: показати статус набору.
+  - `async def fetch_dialog_messages_after(...)`: службовий метод для адмін-консолі.
 
 - В обробнику нових повідомлень (Telethon `events.NewMessage(incoming=True)`):
 
-  - Дістати `user_id`, `chat_id`, `text`.
+  - Дістати `user_id`, `chat_id`, текст або опис медіа.
   - Передати в роутер:
-    - `await router.handle_incoming_message(user_id, chat_id, text)`.
+    - `await router.handle_incoming_message(user_id, chat_id, text, msg_type, media_meta, message_time, message_id)`.
 
 - **Не містить** логіки LLM, історії, платних функцій — тільки транспорт + делегування в роутер.
 
@@ -123,7 +133,7 @@ project_root/
   - `SYSTEM_PROMPTS_DIR` (дефолт: `data/system_prompts`)
   - `SYSTEM_PROMPT_NAME` (без `.txt`, напр. `default`)
 
-**grok_api.py / клас `GrokAPI`**
+**llm_api.py / клас `LLMAPI`**
 
 - Єдиний публічний метод:
 
@@ -169,13 +179,14 @@ data/dialogs/
 
 - Основні методи:
 
-  - `append_message(user_id: int, role: str, content: str) -> None`  
+  - `append_message(user_id: int, role: str, content: str, message_time_iso: str | None, message_id: int | None) -> None`  
     Додає запис виду:
     ```json
     {
       "role": "user" | "assistant",
       "content": "текст",
-      "created_at": "ISO-час"
+      "created_at": "ISO-час",
+      "message_id": 123
     }
     ```
     у поточний чанк `chunk_XXXX.json` користувача `user_id`.  
@@ -183,6 +194,8 @@ data/dialogs/
 
   - `get_recent_context(user_id: int) -> list[dict]`  
     Повертає плоский список повідомлень з кількох останніх чанків (кількість = `HISTORY_MAX_CHUNKS_FOR_CONTEXT`).
+
+  - Додатково є допоміжні методи для синхронізації (отримання останніх message_id).
 
 - **Не знає** про Telegram, Grok, статуси, typing тощо. Працює тільки з файлами та user_id.
 
@@ -197,7 +210,7 @@ data/dialogs/
 - веде стани по користувачах,
 - зберігає/читає історію,
 - формує контекст для Grok,
-- викликає Grok,
+- викликає Grok, який повертає **список JSON-дiй**,
 - відправляє відповіді через `TelegramAPI`.
 
 **Стан по кожному користувачу (в пам'яті):**
@@ -213,7 +226,7 @@ data/dialogs/
 
 1. **Нове повідомлення від Telegram:**
 
-   - Додати `text` у `state[user_id].inbox`.
+   - Додати `text` (або транскрипцію voice) у `state[user_id].inbox`.
    - Оновити `last_activity`.
    - Якщо `busy == True` → нічого більше не робити (піде у наступний цикл).
    - Якщо `busy == False`:
@@ -236,25 +249,30 @@ data/dialogs/
 4. **Формування LLM-контексту:**
 
    - Завантажити system prompt із `data/system_prompts` (ім'я задається у `SYSTEM_PROMPT_NAME` в `settings.py`).
+   - За потреби додати `actions` промпт і `user_info.txt` для конкретного user_id.
    - Побудувати список `messages` для Grok:
      - `{"role": "system", "content": system_prompt}`
-     - далі всі `history_messages` у форматі `{"role": "user"/"assistant", "content": "..."}`
-   - (За потреби — обрізати контекст до безпечної довжини по токенах/символах).
+     - далі всі `history_messages` у форматі `{"role": "user"/"assistant", "content": "..."}` з датами та message_id.
 
 5. **Виклик LLM:**
 
    - Викликати `GrokAPI.generate(messages)`.
-   - Отримати `answer: str`.
-   - Записати відповідь в історію як `role="assistant"`.
+   - Отримати `answer: str` із JSON-списком дій.
+   - Якщо JSON не валідний — **лог** і **ніяких відправок у Telegram**.
+   - Далі кожен action передається у відповідний хендлер з папки `router/actions`.
 
 6. **Typing-імітація:**
 
-   - Включити статус "typing" у Telegram для цього чату (через TelegramAPI).
-   - Почекати 5–20 секунд (налаштовується).
+   - `fake_typing` може прийти окремою дією.
+   - Також перед `send_message` може викликатися `send_typing` з параметром human_seconds.
 
-7. **Відправка відповіді:**
+7. **Виконання екшенів:**
 
-   - Відправити `answer` в чат через `TelegramAPI.send_message(chat_id, answer)` (просто нове повідомлення, не обов’язково reply).
+   - `send_message`/`send_messages` — надсилають текст(и) та пишуть в історію.
+   - `fake_typing` — показує статус набору без відправки.
+   - `add_reaction` — реакція на конкретний message_id.
+   - `wait` — просто пауза між діями.
+   - `ignore` — робимо нічого, але не падаємо.
 
 8. **Завершення циклу:**
 
@@ -267,7 +285,7 @@ data/dialogs/
 
 - Ліміт одночасних викликів Grok (глобальний семафор / пул).
 - Ліміт розміру `inbox[user_id]` і довжини контексту.
-- Можлива реалізація команд типу `/reset` (скидання історії).
+- Команди адмін-консолі можуть синхронізувати історію без виклику LLM.
 
 ---
 
@@ -296,6 +314,7 @@ data/dialogs/
   - де і що саме “чекає”,
   - де можливе блокування,
   - де відбувається робота паралельно.
+- Якщо LLM повертає невалідний JSON — не відправляти сирий текст користувачу, лише логувати.
 
 - Не додавати зайвих сторонніх бібліотек без потреби.
 - Не змішувати шари:
